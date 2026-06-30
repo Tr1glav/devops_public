@@ -1,0 +1,35 @@
+---
+- name: Create scripts directory
+  ansible.builtin.file:
+    path: /etc/vault/scripts
+    state: directory
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+    mode: '0750'
+
+- name: Install auto unseal script
+  ansible.builtin.template:
+    src: "templates/vault-unseal.sh.j2"
+    dest: "/etc/vault/scripts/vault-unseal.sh"
+    owner: "{{ vault_user }}"
+    group: "{{ vault_group }}"
+    mode: '0750'
+  notify: Reload systemd
+
+- name: Configure auto unseal service
+  ansible.builtin.template:
+    src: "templates/vault-unseal.service.j2"
+    dest: "/etc/systemd/system/vault-unseal.service"
+    owner: root
+    group: root
+    mode: '0644'
+  notify:
+    - Reload systemd
+    - Enable Vault Unseal Service
+
+- name: Ensure proper service ordering
+  ansible.builtin.systemd:
+    name: vault-unseal.service
+    enabled: true
+    daemon_reload: true
+  when: inventory_hostname in groups['vault']

@@ -1,0 +1,83 @@
+---
+- name: Ensure Patroni and dependencies are installed
+  ansible.builtin.pip:
+    name:
+      - "patroni[etcd]=={{ patroni_version }}"
+      - psycopg2-binary
+      - cdiff
+    virtualenv: "{{ venv_path }}"
+    state: present
+    extra_args: "--timeout 30 --retries 3"
+  tags: [python, packages, patroni]
+
+- name: Remove incompatible ydiff if exists
+  ansible.builtin.pip:
+    name: ydiff
+    virtualenv: "{{ venv_path }}"
+    state: absent
+  failed_when: false
+  tags: [python, packages]
+
+- name: Ensure PostgreSQL binaries are installed
+  ansible.builtin.apt:
+    name: "postgresql-{{ postgres_version }}"
+    state: present
+    update_cache: true
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  when: ansible_os_family == 'Debian'
+  notify: stop and disable postgresql
+  tags: [packages, postgresql]
+
+- name: Ensure patroni binaries symlinks exist
+  ansible.builtin.file:
+    src: "{{ venv_path }}/bin/{{ item }}"
+    dest: "/usr/local/bin/{{ item }}"
+    state: link
+    force: true
+  loop:
+    - patroni
+    - patronictl
+  tags: [patroni, binaries]
+
+- name: Ensure Patroni configuration directory exists
+  ansible.builtin.file:
+    path: /etc/patroni
+    state: directory
+    owner: "{{ patroni_user }}"
+    group: postgres
+    mode: '0755'
+  tags: [patroni, config]
+
+- name: Ensure data directory exists with correct permissions
+  ansible.builtin.file:
+    path: "/var/lib/postgresql/{{ postgres_version }}/main"
+    state: directory
+    owner: "{{ patroni_user }}"
+    group: postgres
+    mode: '0700'
+  when: not postgres_pg_data_dir_exists.stat.exists or
+    (pg_force_clean | default(false) | bool)
+  tags: [postgresql, data]
+
+- name: Ensure Patroni configuration is up to date
+  ansible.builtin.template:
+    src: patroni.yml.j2
+    dest: /etc/patroni/patroni.yml
+    owner: "{{ patroni_user }}"
+    group: postgres
+    mode: '0640'
+  register: postgres_patroni_config
+  notify: restart patroni
+  tags: [patroni, config]
+
+- name: Ensure Patroni systemd service is configured
+  ansible.builtin.template:
+    src: patroni.service.j2
+    dest: /etc/systemd/system/patroni.service
+    owner: root
+    group: root
+    mode: '0644'
+  register: postgres_patroni_service
+  notify: reload systemd and restart patroni
+  tags: [patroni, systemd]

@@ -1,0 +1,64 @@
+---
+- name: Get default network interface
+  ansible.builtin.set_fact:
+    main_interface: "{{ ansible_default_ipv4.interface }}"
+    router_ip: "<hidden-ip>"
+
+- name: Create route setup script
+  ansible.builtin.copy:
+    dest: /usr/local/bin/setup-routes.sh
+    mode: '0755'
+    content: |
+      #!/bin/bash
+      # Wait for network to be ready
+      for i in {1..30}; do
+          if ip link show {{ main_interface }} up 2>/dev/null; then
+              break
+          fi
+          sleep 1
+      done
+
+      # Remove existing default route
+      ip route del default 2>/dev/null || true
+
+      # Add custom default gateway
+      ip route add default via {{ router_ip }} dev {{ main_interface }}
+
+      # Log success
+      logger -t "route-setup" "Custom gateway set to {{ router_ip }}"
+
+      exit 0
+
+- name: Create systemd service for route setup
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/setup-routes.service
+    mode: '0644'
+    content: |
+      [Unit]
+      Description=Setup custom default gateway
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=oneshot
+      ExecStart=/usr/local/bin/setup-routes.sh
+      RemainAfterExit=yes
+
+      [Install]
+      WantedBy=multi-user.target
+
+- name: Enable and start route setup service
+  ansible.builtin.systemd:
+    name: setup-routes
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Apply route immediately
+  ansible.builtin.command:
+    cmd: "{{ item }}"
+  loop:
+    - ip route del default
+    - ip route add default via {{ router_ip }} dev {{ main_interface }}
+  failed_when: false
+  changed_when: false

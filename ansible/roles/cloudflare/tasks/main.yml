@@ -1,0 +1,19 @@
+---
+- name: Get secrets from vault
+  ansible.builtin.import_tasks: get_secrets.yml
+  tags:
+    - cloudflare
+
+- name: Get from cloudflare
+  ansible.builtin.import_tasks: get_from_cf.yml
+  tags:
+    - cloudflare
+
+- name: Install collection
+  ansible.builtin.import_tasks: install_collection.yml
+  tags:
+    - cloudflare
+- name: Update domains on cf
+  ansible.builtin.import_tasks: update_domains.yml
+  tags:
+    - cloudflare

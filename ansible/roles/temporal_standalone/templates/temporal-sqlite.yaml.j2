@@ -1,0 +1,55 @@
+# Конфигурация Temporal для SQLite
+log:
+  stdout: true
+  level: info
+
+persistence:
+  defaultStore: sqlite-default
+  visibilityStore: sqlite-visibility
+  numHistoryShards: 1  # Для SQLite достаточно 1 шарда
+  datastores:
+    sqlite-default:
+      sql:
+        pluginName: "sqlite"
+        databaseName: "{{ db_file }}"
+        maxConns: 10
+        maxIdleConns: 5
+        maxConnLifetime: "1h"
+    sqlite-visibility:
+      sql:
+        pluginName: "sqlite"
+        databaseName: "{{ db_file }}"
+        maxConns: 5
+        maxIdleConns: 2
+        maxConnLifetime: "1h"
+
+global:
+  membership:
+    maxJoinDuration: 30s
+    broadcastAddress: "{{ ansible_default_ipv4.address }}"
+
+services:
+  frontend:
+    rpc:
+      grpcPort: 7233
+      membershipPort: 6933
+  matching:
+    rpc:
+      grpcPort: 7235
+      membershipPort: 6935
+  history:
+    rpc:
+      grpcPort: 7234
+      membershipPort: 6934
+  worker:
+    rpc:
+      membershipPort: 6939
+
+clusterMetadata:
+  enableGlobalNamespace: false
+  currentClusterName: "active"
+  clusterInformation:
+    active:
+      enabled: true
+      initialFailoverVersion: 1
+      rpcAddress: "{{ ansible_default_ipv4.address }}:7233"

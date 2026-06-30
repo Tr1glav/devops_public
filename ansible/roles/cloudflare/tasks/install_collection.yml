@@ -1,0 +1,5 @@
+---
+- name: Установка коллекции community.general (если не установлена)
+  ansible.builtin.command: ansible-galaxy collection install community.general
+  changed_when: false
+  when: _cloudflare_token is defined

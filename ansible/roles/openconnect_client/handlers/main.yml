@@ -1,0 +1,11 @@
+---
+- name: Restart openconnect
+  ansible.builtin.systemd:
+    name: openconnect@{{ openconnect_client_interface }}
+    state: restarted
+    daemon_reload: true
+  when: openconnect_client_background_script
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true

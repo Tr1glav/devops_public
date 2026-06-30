@@ -1,0 +1,74 @@
+---
+- name: Read certificates from Vault
+  block:
+    - name: Get certificate from Vault
+      ansible.builtin.uri:
+        url: >-
+          {{ vault_addr }}/v1/certs/data/{{ env }}/{{
+          nginx_github_cache_server_name }}
+        method: GET
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+        status_code: [200, 404]
+      register: vault_cert_data
+      delegate_to: localhost
+      become: false
+      no_log: false
+
+    - name: Extract certificate data
+      ansible.builtin.set_fact:
+        cert_data: "{{ vault_cert_data.json.data.data | default({}) }}"
+      when: vault_cert_data.status == 200
+
+- name: Setup certificates from Vault
+  when: cert_data is defined and cert_data | length > 0
+  block:
+    - name: Write certificate file
+      ansible.builtin.copy:
+        content: "{{ cert_data.certificate }}"
+        dest: "{{ nginx_github_cache_ssl_cert }}"
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Restart nginx
+
+    - name: Write private key file
+      ansible.builtin.copy:
+        content: "{{ cert_data.private_key }}"
+        dest: "{{ nginx_github_cache_ssl_key }}"
+        owner: root
+        group: root
+        mode: '0600'
+      notify: Restart nginx
+
+    - name: Write combined certificate file
+      ansible.builtin.copy:
+        content: "{{ cert_data.combined }}"
+        dest: "{{ nginx_github_cache_ssl_combined }}"
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Restart nginx
+
+- name: Setup self-signed certificates (fallback)
+  when: cert_data is not defined or cert_data | length == 0
+  block:
+    - name: Generate self-signed certificate
+      ansible.builtin.shell:
+        cmd: |
+          openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+          -keyout {{ nginx_github_cache_ssl_key }} \
+          -out {{ nginx_github_cache_ssl_cert }} \
+          -subj "/C=RU/ST=Moscow/L=Moscow/\
+          O=GitHubCache/CN={{ nginx_ghrc_cache_server_name }}"
+        creates: "{{ nginx_github_cache_ssl_cert }}"
+      notify: Restart nginx
+
+    - name: Create combined certificate
+      ansible.builtin.shell:
+        cmd: |
+          cat {{ nginx_github_cache_ssl_cert }} \
+          {{ nginx_github_cache_ssl_key }} > \
+          {{ nginx_github_cache_ssl_combined }}
+        creates: "{{ nginx_github_cache_ssl_combined }}"
+      notify: Restart nginx

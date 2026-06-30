@@ -1,0 +1,55 @@
+---
+- name: Read db {{ item }} secrets
+  community.hashi_vault.vault_read:
+    url: "{{ vault_addr }}"
+    token: "{{ vault_token }}"
+    path: "{{ vault_mount }}/data/{{ vault_dbs_path }}/{{ item }}"
+  register: postgres_vault_dbs_secret
+  when: postgres_is_master
+
+- name: Debug vault_dbs_secret
+  ansible.builtin.debug:
+    msg: "{{ item }}"
+
+- name: Create PostgreSQL user for {{ item }}
+  community.postgresql.postgresql_user:
+    name: "{{ item }}"
+    password: "{{ postgres_vault_dbs_secret.data.data.data.pass }}"
+    encrypted: true
+    login_user: postgres
+    login_password: >-
+      {{ (postgres_vault_secrets.json.data.data.superuser_password)
+      | default('') }}
+    login_unix_socket: "/var/run/postgresql/"
+  when: postgres_vault_dbs_secret is defined
+
+- name: Create database {{ item }}
+  community.postgresql.postgresql_db:
+    name: "{{ item }}"
+    owner: "{{ item }}"
+    encoding: "UTF8"
+    login_user: postgres
+    login_password: >-
+      {{ (postgres_vault_secrets.json.data.data.superuser_password)
+      | default('') }}
+    login_unix_socket: "/var/run/postgresql/"
+  when: postgres_vault_dbs_secret is defined
+
+- name: Revoke PUBLIC CONNECT privileges
+  community.postgresql.postgresql_privs:
+    db: postgres
+    type: database
+    database: "{{ item }}"
+    privs: CONNECT
+    roles: PUBLIC
+    state: absent
+
+- name: Set secure default privileges
+  community.postgresql.postgresql_query:
+    db: postgres
+    query: |
+      REVOKE ALL ON SCHEMA public FROM PUBLIC;
+      GRANT USAGE ON SCHEMA public TO postgres;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO postgres;
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public
+      REVOKE ALL ON TABLES FROM PUBLIC;

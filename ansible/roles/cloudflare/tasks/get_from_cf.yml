@@ -1,0 +1,76 @@
+---
+# Получение всех DNS записей (единственный запрос)
+- name: Получение всех DNS записей из Cloudflare
+  ansible.builtin.uri:
+    url: >-
+      https://api.cloudflare.com/client/v4/zones/{{
+      _cloudflare_zone_id }}/dns_records?per_page=1000
+    method: GET
+    headers:
+      Authorization: "Bearer {{ _cloudflare_token }}"
+      Content-Type: "application/json"
+  register: cloudflare_existing_records_response
+  failed_when: false
+
+- name: Проверка ответа от Cloudflare
+  ansible.builtin.fail:
+    msg: |
+      Не удалось получить записи из Cloudflare.
+      Статус: {{ cloudflare_existing_records_response.status |
+        default('неизвестно') }}
+      Ошибка: {{ cloudflare_existing_records_response.json.errors |
+        default('неизвестная ошибка') }}
+  when: >-
+    cloudflare_existing_records_response.failed |
+    default(false) or
+    cloudflare_existing_records_response.status != 200
+
+# Оптимизация: создаем оба словаря за один проход
+- name: Создание словарей существующих записей
+  ansible.builtin.set_fact:
+    cloudflare_existing_records_dict: >-
+      {{ cloudflare_existing_records_dict |
+      default({}) |
+      combine({item.name + '|' + item.type: item}) }}
+    cloudflare_existing_records_id_map: >-
+      {{ cloudflare_existing_records_id_map |
+      default({}) |
+      combine({item.name + '|' + item.type: {
+      'id': item.id, 'name': item.name,
+      'type': item.type, 'content': item.content,
+      'ttl': item.ttl, 'proxied': item.proxied,
+      'comment': item.comment | default('')
+      }}) }}
+  loop: "{{ cloudflare_existing_records_response.json.result | default([]) }}"
+  loop_control:
+    loop_var: item
+
+# Оптимизация: создание плоской структуры с использованием фильтров Jinja2
+- name: Создание плоской структуры записей
+  ansible.builtin.set_fact:
+    _cloudflare_flat_records: >-
+      {{ _cloudflare_flat_records |
+      default({}) |
+      combine(_process_records) }}
+  vars:
+    _process_records: >-
+      {%- set result = {} -%}
+      {%- for env_key, env_records in dns_records.items() -%}
+        {%- for record_key, record_value in env_records.items() -%}
+          {%- set _ = result.update({record_key: record_value | combine({
+            'env': env_key,
+            'comment': 'managed_by=ansible env=' + product_env
+          })}) -%}
+        {%- endfor -%}
+      {%- endfor -%}
+      {{ result }}
+
+# Оптимизация: подсчет статистики за один проход без цикла
+- name: Подсчет статистики по окружениям
+  ansible.builtin.set_fact:
+    __cloudflare_env_stats: >-
+      {%- set result = {} -%}
+      {%- for env_key, env_records in dns_records.items() -%}
+        {%- set _ = result.update({env_key: env_records | length}) -%}
+      {%- endfor -%}
+      {{ result }}

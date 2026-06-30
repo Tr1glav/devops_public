@@ -1,0 +1,23 @@
+---
+- name: Skip reboot for containers
+  ansible.builtin.meta: end_play
+  when: vm_is_container | default(false)
+
+- name: Import set_facts.yml
+  ansible.builtin.import_tasks: set_facts.yml
+  when:
+    - not vm_is_container
+
+- name: Import reboot_k8s.yml
+  ansible.builtin.import_tasks: reboot_k8s.yml
+  when:
+    - not vm_is_container
+    - is_k8s_node
+    - reboot_flag.stat.exists
+
+- name: Import reboot_non_k8s.yml
+  ansible.builtin.import_tasks: reboot_non_k8s.yml
+  when:
+    - not vm_is_container
+    - reboot_flag.stat.exists
+    - not is_k8s_node

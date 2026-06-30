@@ -1,0 +1,25 @@
+storage "raft" {
+  path = "/opt/vault/data/raft"
+  node_id = "{{ inventory_hostname }}"
+  retry_join {
+    leader_api_addr = "http://{{ hostvars[groups['vault']|first]['ansible_host'] }}:8200"  # Используем HTTP вместо HTTPS
+  }
+}
+
+listener "tcp" {
+  address = "0.0.0.0:8200"
+  cluster_address = "0.0.0.0:8201"
+  tls_disable = true  # Явно отключаем TLS для тестовой среды
+}
+
+disable_mlock = true
+api_addr = "{{ vault_api_addr }}"
+cluster_addr = "{{ vault_cluster_addr }}"
+ui = {{ vault_ui | lower }}
+
+autopilot {
+  cleanup_dead_servers = true           # Автоматическое удаление нерабочих узлов
+  last_contact_threshold = "200ms"     # Максимальное допустимое время since last contact
+  dead_server_last_contact_threshold = "10m" # Время, после которого узел считается нерабочим
+  server_stabilization_time = "10s"     # Время стабилизации нового сервера
+}

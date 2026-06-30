@@ -1,0 +1,55 @@
+---
+- name: Create certificate secret in Vault for {{ current_domain }}
+  block:
+    - name: Read certificate files for {{ current_domain }}
+      ansible.builtin.slurp:
+        src: "{{ item }}"
+      loop:
+        - "/etc/letsencrypt/live/{{ current_domain }}/fullchain.pem"
+        - "/etc/letsencrypt/live/{{ current_domain }}/privkey.pem"
+        - "/etc/letsencrypt/live/{{ current_domain }}/combined.pem"
+      register: certbot_slurped_files
+      no_log: false
+
+    - name: Write certificate to Vault using URI module
+      ansible.builtin.uri:
+        url: "{{ vault_addr }}/v1/certs/data/{{ env }}/{{ current_domain }}"
+        method: POST
+        headers:
+          X-Vault-Token: "{{ vault_token }}"
+        body:
+          data:
+            certificate: >-
+              {{ (certbot_slurped_files.results
+              | selectattr('source', 'match', '.*fullchain.*')
+              | first).content | b64decode }}
+            private_key: >-
+              {{ (certbot_slurped_files.results
+              | selectattr('source', 'match', '.*privkey.*')
+              | first).content | b64decode }}
+            combined: >-
+              {{ (certbot_slurped_files.results
+              | selectattr('source', 'match', '.*combined.*')
+              | first).content | b64decode }}
+        body_format: json
+        status_code: [200, 204]
+      delegate_to: localhost
+      become: false
+      register: certbot_vault_result
+      changed_when: certbot_vault_result.status in [200, 204]
+      no_log: false
+      tags: vault
+
+  rescue:
+    - name: Handle Vault operation failure
+      ansible.builtin.fail:
+        msg: >-
+          Failed to create Vault secret for {{ current_domain }}.
+          {% if __certbot_cert_files is defined %}
+          Missing files: {{ __certbot_cert_files.results |
+            selectattr('stat.exists', '==', false) |
+            map(attribute='item') | list }}
+          {% endif %}
+          Vault error: {{ certbot_vault_result.stderr |
+            default('Unknown error') }}
+      tags: vault

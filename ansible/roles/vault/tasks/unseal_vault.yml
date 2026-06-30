@@ -1,0 +1,67 @@
+---
+- name: Check status before unseal
+  ansible.builtin.command:
+    cmd: "vault status -format=json"
+  environment:
+    VAULT_ADDR: "{{ vault_api_addr }}"
+  register: vault_seal_status
+  when: inventory_hostname in groups['vault']
+  changed_when: false
+  ignore_errors: true
+
+- name: Check for unseal keys
+  ansible.builtin.fail:
+    msg: >-
+      Не найдены ключи распечатывания.
+      Проверьте файл /root/vault_init_keys.txt
+  when:
+    - inventory_hostname in groups['vault']
+    - vault_unseal_keys|length < vault_keythreshold
+
+- name: Unseal Vault
+  ansible.builtin.command:
+    cmd: "vault operator unseal {{ item }}"
+  environment:
+    VAULT_ADDR: "{{ vault_api_addr }}"
+  loop: "{{ vault_unseal_keys[0:vault_keythreshold] }}"
+  when:
+    - vault_unseal_keys|length >= vault_keythreshold
+    - inventory_hostname in groups['vault']
+    - >-
+        vault_seal_status.stdout is defined and
+        (vault_seal_status.stdout|from_json).sealed
+  register: vault_unseal_results
+  changed_when: "'Vault is already unsealed' not in vault_unseal_results.stderr"
+  retries: 5
+  delay: 10
+  no_log: true
+
+- name: Check join success
+  ansible.builtin.command:
+    cmd: |
+      vault operator raft list-peers -format=json
+  environment:
+    VAULT_ADDR: "{{ vault_api_addr }}"
+    VAULT_TOKEN: "{{ vault_root_token }}"
+  register: _vault_raft_peers
+  when: inventory_hostname != groups['vault'] | first
+  changed_when: false
+  retries: 5
+  delay: 10
+  until:
+    - _vault_raft_peers.rc == 0
+    - >-
+        inventory_hostname in
+        ((_vault_raft_peers.stdout |
+        from_json).data.config.servers |
+        default([]) |
+        map(attribute='node_id') | list)
+  failed_when: false
+
+- name: Display cluster info
+  ansible.builtin.debug:
+    msg: >-
+      Текущие участники кластера: {{
+      _vault_raft_peers.stdout |
+      default('не удалось получить') }}
+  when: inventory_hostname != groups['vault']|first

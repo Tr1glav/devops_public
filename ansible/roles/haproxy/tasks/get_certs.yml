@@ -1,0 +1,36 @@
+---
+- name: Ensure certs directory exists
+  ansible.builtin.file:
+    path: "{{ haproxy_ssl_dir }}"
+    state: directory
+    mode: '0755'
+
+- name: Get certificates from Vault for {{ env }}
+  connection: local
+  become: false
+  environment:
+    VAULT_ADDR: "{{ vault_addr }}"
+    VAULT_TOKEN: "{{ vault_token }}"
+  loop: "{{ haproxy_ssl_domains }}"
+  register: haproxy_vault_results
+  vars:
+    current_domain: "{{ item }}"
+  ansible.builtin.command: |
+    vault kv get -mount=certs -field=combined "{{ env }}/{{ current_domain }}"
+  changed_when: false
+  ignore_errors: true
+  delegate_to: localhost
+  run_once: true
+
+- name: Save to {{ env }} successfully obtained certificates
+  ansible.builtin.copy:
+    content: "{{ item.stdout }}"
+    dest: "{{ haproxy_ssl_dir }}/{{ item.item }}.crt"
+    mode: '0644'
+  loop: "{{ haproxy_vault_results.results }}"
+  when:
+    - item is not skipped
+    - item.rc == 0
+    - item.stdout | length > 0
+  loop_control:
+    label: "Processing {{ item.item }}"

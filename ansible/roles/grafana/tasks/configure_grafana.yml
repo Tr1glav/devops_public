@@ -1,0 +1,90 @@
+---
+- name: Copy grafana config
+  ansible.builtin.template:
+    src: grafana.ini.j2
+    dest: "{{ grafana_config_dir }}/grafana.ini"
+    owner: "{{ grafana_user }}"
+    group: "{{ grafana_group }}"
+    mode: '0640'
+  notify: Restart grafana
+
+- name: Create datasources provisioning directory
+  ansible.builtin.file:
+    path: "{{ grafana_config_dir }}/provisioning/datasources"
+    state: directory
+    owner: "{{ grafana_user }}"
+    group: "{{ grafana_group }}"
+    mode: '0755'
+
+- name: Copy datasources provisioning
+  ansible.builtin.template:
+    src: provisioning/datasources/datasources.yml.j2
+    dest: "{{ grafana_config_dir }}/provisioning/datasources/datasources.yml"
+    owner: "{{ grafana_user }}"
+    group: "{{ grafana_group }}"
+    mode: '0644'
+  notify: Restart grafana
+
+- name: Create dashboards provisioning directory
+  ansible.builtin.file:
+    path: "{{ grafana_config_dir }}/provisioning/dashboards"
+    state: directory
+    owner: "{{ grafana_user }}"
+    group: "{{ grafana_group }}"
+    mode: '0755'
+
+- name: Copy dashboards provisioning
+  ansible.builtin.template:
+    src: provisioning/dashboards/dashboards.yml.j2
+    dest: "{{ grafana_config_dir }}/provisioning/dashboards/dashboards.yml"
+    owner: "{{ grafana_user }}"
+    group: "{{ grafana_group }}"
+    mode: '0644'
+  notify: Restart grafana
+
+- name: Create dashboards directory
+  ansible.builtin.file:
+    path: "{{ grafana_config_dir }}/provisioning/dashboards/dashboards"
+    state: directory
+    owner: "{{ grafana_user }}"
+    group: "{{ grafana_group }}"
+    mode: '0755'
+
+- name: Copy system overview dashboard
+  ansible.builtin.template:
+    src: provisioning/dashboards/system-overview.json.j2
+    dest: >-
+      {{ grafana_config_dir
+      }}/provisioning/dashboards/dashboards/system-overview.json
+    owner: "{{ grafana_user }}"
+    group: "{{ grafana_group }}"
+    mode: '0644'
+  notify: Restart grafana
+
+- name: Copy node overview dashboard
+  ansible.builtin.template:
+    src: provisioning/dashboards/node-overview.json.j2
+    dest: >-
+      {{ grafana_config_dir
+      }}/provisioning/dashboards/dashboards/node-overview.json
+    owner: "{{ grafana_user }}"
+    group: "{{ grafana_group }}"
+    mode: '0644'
+  notify: Restart grafana
+
+- name: Copy grafana systemd service
+  ansible.builtin.template:
+    src: grafana.service.j2
+    dest: /etc/systemd/system/grafana.service
+    mode: '0644'
+  notify: Restart grafana
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Enable and start grafana
+  ansible.builtin.systemd:
+    name: grafana
+    enabled: true
+    state: started

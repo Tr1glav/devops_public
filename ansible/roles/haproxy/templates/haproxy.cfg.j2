@@ -1,0 +1,108 @@
+global
+    log /dev/log local0 info
+    log /dev/log local1 notice
+    tune.ssl.default-dh-param 2048
+    chroot /var/lib/haproxy
+    stats socket /run/haproxy/admin.sock mode 660 level admin expose-fd listeners
+    stats timeout 30s
+    user haproxy
+    group haproxy
+    daemon
+    maxconn {{ haproxy_maxconn | default(4000) }}
+    tune.ssl.default-dh-param {{ haproxy_dh_param | default(2048) }}
+    ssl-default-bind-ciphers {{ haproxy_ssl_ciphers | default("ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384") }}
+    ssl-default-bind-ciphersuites {{ haproxy_ssl_ciphersuites | default("TLS_AES_256_GCM_SHA384") }}
+    ssl-default-bind-options {{ haproxy_ssl_options | default("no-sslv3 no-tlsv10 no-tlsv11 prefer-client-ciphers") }}
+
+defaults
+    log global
+    mode http
+    option httplog
+    option dontlognull
+    option forwardfor
+    option http-server-close
+    option http-keep-alive
+    timeout connect {{ haproxy_timeout_connect | default("5s") }}
+    timeout client {{ haproxy_timeout_client | default("50s") }}
+    timeout server {{ haproxy_timeout_server | default("50s") }}
+    timeout http-request {{ haproxy_timeout_http_request | default("10s") }}
+    timeout http-keep-alive {{ haproxy_timeout_http_keep_alive | default("10s") }}
+    
+    {% for error_code in haproxy_error_codes | default([400, 403, 408, 500, 502, 503, 504])  %}
+    errorfile {{ error_code }} /etc/haproxy/errors/{{ error_code }}.http
+    {% endfor  %}
+
+
+# PostgreSQL Specific Configuration
+frontend pg_write
+    mode tcp
+    bind *:5000
+    default_backend pg_master
+
+frontend pg_read
+    mode tcp
+    bind *:5001
+    default_backend pg_replicas
+
+backend pg_master
+    mode tcp
+    option httpchk OPTIONS /master
+    http-check expect status 200
+    {% for server in groups['postgres']  %}
+
+    server {{ server }} {{ hostvars[server].ansible_host }}:5432 check port 8008 inter 3s fall 3 rise 2
+    {% endfor  %}
+
+backend pg_replicas
+    mode tcp
+    option httpchk OPTIONS /replica
+    http-check expect status 200
+    {% for server in groups['postgres']  %}
+
+    server {{ server }} {{ hostvars[server].ansible_host }}:5432 check port 8008 inter 3s fall 3 rise 2
+    {% endfor  %}
+
+
+# HTTP Frontend (redirect to HTTPS)
+frontend http-in
+    bind *:80
+    {% for domain in haproxy_ssl_domains  %}
+    redirect scheme https code 301 if { hdr(host) -i {{ domain }} } !{ ssl_fc }
+    {% endfor  %}
+
+# HTTPS Frontend
+frontend https-in
+    bind *:443 ssl {% for domain in haproxy_ssl_domains  %}crt {{ haproxy_ssl_dir }}/{{ domain }}.crt{% if not loop.last  %} {% endif  %}{% endfor  %} alpn h2,http/1.1
+    http-request set-header X-Forwarded-Proto https
+    http-request set-header X-Real-IP %[src]
+    http-response set-header Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+    
+    {% for domain in haproxy_ssl_domains  %}
+    acl host_{{ domain | replace('.', '_') }} hdr(host) -i {{ domain }}
+    use_backend bk_{{ domain | replace('.', '_') }} if host_{{ domain | replace('.', '_') }}
+    {% endfor  %}
+
+{% for backend in haproxy_backends  %}
+# Backend for {{ backend.name }}
+backend bk_{{ backend.name | replace('.', '_') }}
+    mode {{ backend.mode }}
+    balance {{ backend.balance }}
+    {% if backend.health_check is defined  %}
+    option httpchk {{ backend.health_check.method | default('GET') }} {{ backend.health_check.path | default('/') }}
+    http-check expect {{ backend.health_check.expect | default('status 200') }}
+    {% endif  %}
+    {% for server in backend.servers  %}
+
+    server {{ server.name }} {{ server.address }}:{{ server.port }} {% if server.ssl  %}ssl verify none{% endif  %} {% if backend.health_check is defined  %}check inter {{ server.check_interval | default('5s') }} fall {{ server.fall | default(3) }} rise {{ server.rise | default(2) }}{% endif  %}
+    {% endfor  %}
+{% endfor  %}
+
+# Statistics
+listen stats
+    bind *:{{ haproxy_stats_port | default(8404) }}
+    stats enable
+    stats uri {{ haproxy_stats_uri | default("/stats") }}
+    stats refresh {{ haproxy_stats_refresh | default("5s") }}
+    stats show-node
+    stats auth {{ haproxy_stats_user | default("admin") }}:{{ haproxy_stats_password | default("admin") }}
+    stats hide-version

@@ -1,0 +1,44 @@
+---
+- name: Install etcd
+  block:
+    - name: Download etcd package
+      ansible.builtin.get_url:
+        url: "{{ etcd_url }}"
+        dest: "/tmp/etcd-v{{ etcd_version }}-linux-amd64.tar.gz"
+        timeout: 60
+        mode: '0644'
+
+    - name: Extract etcd binaries
+      ansible.builtin.unarchive:
+        src: "/tmp/etcd-v{{ etcd_version }}-linux-amd64.tar.gz"
+        dest: "/tmp"
+        remote_src: true
+        extra_opts: ["--no-same-owner"]
+        creates: "/tmp/etcd-v{{ etcd_version }}-linux-amd64/etcd"
+
+    - name: Install etcd binaries
+      ansible.builtin.copy:
+        src: "/tmp/etcd-v{{ etcd_version }}-linux-amd64/{{ item }}"
+        dest: "/usr/local/bin/{{ item }}"
+        mode: "0755"
+        remote_src: true
+      loop:
+        - etcd
+        - etcdctl
+
+    - name: Cleanup temporary files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "/tmp/etcd-v{{ etcd_version }}-linux-amd64.tar.gz"
+        - "/tmp/etcd-v{{ etcd_version }}-linux-amd64"
+
+  rescue:
+    - name: Cleanup on failure
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - "/tmp/etcd-v{{ etcd_version }}-linux-amd64.tar.gz"
+        - "/tmp/etcd-v{{ etcd_version }}-linux-amd64"

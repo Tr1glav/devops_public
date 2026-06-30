@@ -1,0 +1,55 @@
+---
+- name: Configure logrotate for Nextcloud
+  ansible.builtin.copy:
+    content: |
+      /var/www/nextcloud/data/nextcloud.log {
+        daily
+        rotate 14
+        missingok
+        compress
+        delaycompress
+        notifempty
+        copytruncate
+      }
+    dest: /etc/logrotate.d/nextcloud
+    mode: '0644'
+
+- name: Start PHP-FPM first
+  ansible.builtin.systemd:
+    name: "php{{ nextcloud_php_version }}-fpm"
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Wait for PHP-FPM socket
+  ansible.builtin.wait_for:
+    path: "/var/run/php/php{{ nextcloud_php_version }}-fpm-nextcloud.sock"
+    state: present
+    timeout: 30
+
+- name: Start remaining services
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: started
+    enabled: true
+  loop:
+    - nginx
+    - mysql
+    - redis-server
+
+- name: Set correct permissions
+  ansible.builtin.file:
+    path: "{{ item }}"
+    owner: www-data
+    group: www-data
+    recurse: true
+  loop:
+    - /var/www/nextcloud
+    - "{{ nextcloud_data_dir }}"
+
+- name: Run occ upgrade
+  ansible.builtin.command:
+    cmd: "php {{ nextcloud_install_dir }}/occ upgrade"
+  become: true
+  become_user: "www-data"
+  changed_when: false

@@ -1,0 +1,44 @@
+default:
+  language: {{ redmine_default_language }}
+  default_language: {{ redmine_default_language }}
+  default_theme: {{ redmine_default_theme }}
+
+  attachments_storage_path: {{ redmine_attachments_storage_path }}
+  max_attachement_size: {{ redmine_max_attach_size }}
+
+  session_store: {{ redmine_session_store }}
+  session_key: {{ redmine_session_key }}
+
+  autologin_cookie_key: {{ redmine_autologin_cookie_key }}
+  autologin_cookie_path: {{ redmine_autologin_cookie_path }}
+
+  scm_subversion_command: svn
+  scm_mercurial_command: hg
+  scm_git_command: git
+  scm_cvs_command: cvs
+
+  diff_max_lines: 15000
+
+  email_delivery:
+    delivery_method: {{ redmine_email_smtp_delivery_method }}
+    smtp_settings:
+      address: {{ redmine_email_smtp_host }}
+      port: {{ redmine_email_smtp_port }}
+      domain: {{ redmine_domain }}
+      {% if redmine_email_smtp_user  %}
+      user_name: {{ redmine_email_smtp_user }}
+      password: {{ redmine_email_smtp_password }}
+      {% endif  %}
+      {% if redmine_email_smtp_tls  %}
+      enable_starttls_auto: true
+      {% endif  %}
+      from: {{ redmine_email_from }}
+
+  warn_on_migration: true
+  login_required: true
+  self_registration: false
+  show_default_account: false
+  cache_formats: true
+
+production:
+  secret_key_base: {{ redmine_secret_key_base }}

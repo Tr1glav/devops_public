@@ -1,0 +1,6 @@
+---
+- name: Установка зависимостей
+  ansible.builtin.package:
+    name: ["curl", "jq"]
+    state: present
+    update_cache: true

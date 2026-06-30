@@ -1,0 +1,5 @@
+config.active_record.dump_schema_after_migration = false
+
+config.after_initialize do
+  Redmine::DefaultData::Loader.load(false, '{{ redmine_default_language }}')
+end

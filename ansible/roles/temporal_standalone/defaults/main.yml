@@ -1,0 +1,32 @@
+---
+temporal_version: "1.29.3"
+arch: "amd64"
+temporal_user: "temporal"
+temporal_group: "temporal"
+bin_dir: "/usr/local/bin"
+data_dir: "/var/lib/temporal"
+config_dir: "/etc/temporal"
+
+# --- Настройки локальной БД ---
+db_file: "{{ data_dir }}/temporal.db"
+
+# --- URLs для загрузки ---
+temporal_cli_url: >-
+  https://github.com/temporalio/cli/releases/download/v1.2.0/temporal_cli_1.2.0_linux_{{
+  arch }}.tar.gz
+
+# --- Настройки воркеров ---
+worker_jar_url: "https://example.com/path/to/your-worker.jar"
+worker_jar_dest: "/opt/temporal-worker/worker.jar"
+worker_config_dir: "/etc/temporal-worker"
+worker_log_dir: "/var/log/temporal-worker"
+worker_user: "temporal-worker"
+worker_group: "temporal-worker"
+
+# --- Настройки Python воркера ---
+python_venv_dir: "/opt/temporal-worker/venv"
+python_worker_script: "/opt/temporal-worker/worker.py"
+
+# --- Флаги установки ---
+install_python_worker: true
+install_java_worker: false

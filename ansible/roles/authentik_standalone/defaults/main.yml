@@ -1,0 +1,37 @@
+---
+authentik_version: "2025.10.3"
+authentik_install_dir: "/opt/authentik"
+authentik_user: "authentik"
+authentik_domain: "auth.{{ domain }}"
+
+authentik_secret_key: ""
+authentik_log_level: "info"
+
+authentik_db_name: "authentik"
+authentik_db_user: "authentik"
+authentik_db_host: "localhost"
+authentik_db_port: 5432
+authentik_db_password: ""
+
+authentik_redis_host: "localhost"
+authentik_redis_port: 6379
+authentik_redis_password: ""
+
+authentik_email_host: "{{ smtp_host | default('localhost') }}"
+authentik_email_port: 587
+authentik_email_username: ""
+authentik_email_password: ""
+authentik_email_use_tls: true
+authentik_email_from: "authentik@{{ authentik_domain }}"
+
+authentik_vault_mount: "infra"
+authentik_vault_path: "{{ env }}/authentik"
+
+authentik_enable_ssl: true
+authentik_certs_vault_mount: "certs"
+authentik_certs_vault_path: "{{ env }}/{{ authentik_domain }}"
+
+authentik_worker_threads: 4
+authentik_listen_port: 9000
+
+authentik_trusted_proxy_cidrs: ["<hidden-ip>/8", "<hidden-ip>/12", "<hidden-ip>/16"]

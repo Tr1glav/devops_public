@@ -1,0 +1,7 @@
+---
+- name: Run cloudflare
+  hosts: localhost
+  become: false
+  gather_facts: false
+  roles:
+    - role: cloudflare

@@ -1,0 +1,14 @@
+[Unit]
+Description=Grafana instance
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart={{ grafana_dir }}/bin/grafana server --homepath {{ grafana_dir }} --config {{ grafana_config_dir }}/grafana.ini
+Restart=on-failure
+User={{ grafana_user }}
+Group={{ grafana_group }}
+RestartSec=5s
+
+[Install]
+WantedBy=multi-user.target

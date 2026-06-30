@@ -1,0 +1,38 @@
+---
+- name: Ensure iptables-persistent is installed
+  ansible.builtin.package:
+    name: iptables-persistent
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Create iptables directory
+  ansible.builtin.file:
+    path: /etc/iptables
+    state: directory
+    mode: "0755"
+
+- name: Allow k3s ports
+  ansible.builtin.iptables:
+    chain: INPUT
+    protocol: "{{ item.proto }}"
+    destination_port: "{{ item.port }}"
+    jump: ACCEPT
+    comment: "{{ item.comment }}"
+  loop: "{{ k3s_firewall_ports }}"
+  register: k3s_firewall_rules
+
+- name: Save iptables rules
+  ansible.builtin.shell:
+    cmd: |
+      iptables-save > /etc/iptables/rules.v4
+      ip6tables-save > /etc/iptables/rules.v6 2>/dev/null || true
+  changed_when: false
+  when: k3s_firewall_rules is changed
+
+- name: Enable netfilter-persistent service
+  ansible.builtin.systemd:
+    name: netfilter-persistent
+    enabled: true
+    state: started
+  failed_when: false
+  when: ansible_os_family == "Debian"

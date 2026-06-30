@@ -1,0 +1,5 @@
+---
+- name: Configure
+  ansible.builtin.import_tasks: configure.yml
+  tags:
+    - firewall

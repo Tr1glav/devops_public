@@ -1,0 +1,41 @@
+---
+- name: Create SSL directory
+  ansible.builtin.file:
+    path: /etc/nginx/ssl
+    state: directory
+    mode: '0750'
+    owner: root
+    group: root
+
+- name: Install SSL certificate
+  ansible.builtin.copy:
+    content: "{{ _nextcloud_ssl_certificate }}"
+    dest: /etc/nginx/ssl/{{ nextcloud_domain }}.crt
+    mode: '0644'
+    owner: root
+    group: root
+  when: _nextcloud_ssl_certificate != ''
+  notify: Restart nginx
+  no_log: true
+
+- name: Install combined SSL certificate (chain)
+  ansible.builtin.copy:
+    content: "{{ _nextcloud_ssl_combined }}"
+    dest: /etc/nginx/ssl/{{ nextcloud_domain }}-combined.crt
+    mode: '0644'
+    owner: root
+    group: root
+  when: _nextcloud_ssl_combined != ''
+  notify: Restart nginx
+  no_log: true
+
+- name: Install SSL private key
+  ansible.builtin.copy:
+    content: "{{ _nextcloud_ssl_private_key }}"
+    dest: /etc/nginx/ssl/{{ nextcloud_domain }}.key
+    mode: '0600'
+    owner: root
+    group: root
+  when: _nextcloud_ssl_private_key != ''
+  notify: Restart nginx
+  no_log: true

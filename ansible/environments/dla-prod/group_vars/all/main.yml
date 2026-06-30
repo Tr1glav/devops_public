@@ -1,0 +1,9 @@
+---
+ansible_python_interpreter: /usr/bin/python3
+
+vault_addr: "{{ lookup('env', 'VAULT_ADDR') | \
+  default('http://vault.dev.dla.su') }}"
+vault_token: "{{ lookup('env', 'VAULT_TOKEN') | default('') }}"
+
+haproxy_ssl_domains:
+  - vpn.dla.su

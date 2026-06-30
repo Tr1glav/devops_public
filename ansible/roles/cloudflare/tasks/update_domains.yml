@@ -1,0 +1,220 @@
+---
+# Получение списка записей с индексами
+- name: Получение списка всех записей с индексами
+  ansible.builtin.set_fact:
+    record_list_with_index: >-
+      {{ record_list_with_index |
+      default([]) +
+      [item | combine({'index': idx})] }}
+  loop: "{{ _cloudflare_flat_records | dict2items }}"
+  loop_control:
+    index_var: idx
+    label: "{{ item.key }}"
+  when: _cloudflare_flat_records is defined
+
+# Проверка наличия existing_records_id_map
+- name: Проверка наличия existing_records_id_map
+  ansible.builtin.fail:
+    msg: >-
+      existing_records_id_map не определена.
+      Убедитесь, что роль get_from_cf.yml была
+      выполнена успешно.
+  when: cloudflare_existing_records_id_map is not defined
+
+- name: Debug _cloudflare_flat_records
+  ansible.builtin.debug:
+    var: _cloudflare_flat_records
+
+- name: Debug matching test
+  ansible.builtin.debug:
+    msg:
+      - "record_name: {{ 'haproxy-lb.dev.dla.su' }}"
+      - "config_key: haproxy-lb.dev"
+      - "domain: {{ domain }}"
+      - "config_key + '.' + domain: {{ 'haproxy-lb.dev' + '.' + domain }}"
+      - >-
+          Match: {{ 'haproxy-lb.dev.dla.su' ==
+          'haproxy-lb.dev' + '.' + domain }}
+      - >-
+          Check result: {{ 'haproxy-lb.dev.dla.su' ==
+          'haproxy-lb.dev' or
+          'haproxy-lb.dev.dla.su' ==
+          'haproxy-lb.dev' + '.' + domain }}
+
+# Определение записей для удаления (оптимизировано - единый шаг)
+- name: Debug keys in flat records
+  ansible.builtin.debug:
+    msg: "Keys: {{ _cloudflare_flat_records.keys() | list }}"
+
+- name: Build full domain names map
+  ansible.builtin.set_fact:
+    config_full_names: >-
+      {%- set result = {} -%}
+      {%- for key, value in _cloudflare_flat_records.items() -%}
+        {%- set full_name = key if
+          key.endswith('.' + domain)
+          else key + '.' + domain -%}
+        {%- set _ = result.update({full_name: value.type}) -%}
+      {%- endfor -%}
+      {{ result }}
+
+- name: Debug full domain names
+  ansible.builtin.debug:
+    var: config_full_names
+
+# Определение записей для удаления (оптимизировано - единый шаг)
+- name: Формирование списка записей для удаления
+  ansible.builtin.set_fact:
+    records_to_delete: >-
+      {{ records_to_delete |
+      default([]) +
+      [record_item.value] }}
+  loop: "{{ cloudflare_existing_records_id_map | dict2items }}"
+  loop_control:
+    loop_var: record_item
+    label: "{{ record_item.key }}"
+  vars:
+    record_name: "{{ record_item.key.split('|')[0] }}"
+    record_type: "{{ record_item.key.split('|')[1] }}"
+    exists_in_config: >-
+      {{ record_name in config_full_names and
+      config_full_names[record_name] == record_type }}
+  when:
+    - cloudflare_existing_records_id_map is defined
+    - _cloudflare_flat_records is defined
+    - not (exists_in_config | bool)
+    - record_item.value.comment is defined
+    - >-
+        record_item.value.comment in
+        ["managed_by=ansible env=" + product_env,
+        "managed_by=ansible env=" + env]
+
+# Удаление устаревших DNS записей
+- name: Удаление устаревших DNS записей
+  ansible.builtin.uri:
+    url: >-
+      https://api.cloudflare.com/client/v4/zones/{{
+      _cloudflare_zone_id }}/dns_records/{{ item.id }}
+    method: DELETE
+    headers:
+      Authorization: "Bearer {{ _cloudflare_token }}"
+      Content-Type: "application/json"
+    status_code: 200
+    timeout: 60
+  loop: "{{ records_to_delete | default([]) }}"
+  loop_control:
+    loop_var: item
+    label: "{{ item.name }} ({{ item.type }})"
+  register: __cloudflare_dns_delete_result
+  until: __cloudflare_dns_delete_result is not failed
+  retries: 3
+  delay: 5
+  throttle: 5
+  when:
+    - _cloudflare_token is defined
+    - _cloudflare_zone_id is defined
+    - records_to_delete | default([]) | length > 0
+
+# Обработка DNS записей
+- name: Обработка DNS записей
+  community.general.cloudflare_dns:
+    zone: "{{ domain }}"
+    record: >-
+      {{ item.key if
+      item.key.endswith('.' + domain)
+      else item.key + '.' + domain }}
+    type: "{{ item.value.type }}"
+    value: "{{ item.value.content }}"
+    ttl: "{{ item.value.ttl | int }}"
+    proxied: "{{ item.value.proxied | bool }}"
+    comment: "managed_by=ansible env={{ product_env }}"
+    api_token: "{{ _cloudflare_token }}"
+    timeout: 60
+    state: present
+  loop: "{{ _cloudflare_flat_records | dict2items }}"
+  loop_control:
+    loop_var: item
+    label: "{{ item.key }} ({{ item.value.type }})"
+  register: __cloudflare_dns_update_result
+  until: __cloudflare_dns_update_result is not failed
+  retries: 3
+  delay: 5
+  throttle: 5
+  when:
+    - _cloudflare_token is defined
+    - _cloudflare_zone_id is defined
+    - _cloudflare_flat_records is defined
+
+# Итоговая статистика
+- name: Итоговая статистика DNS операций
+  ansible.builtin.debug:
+    msg:
+      - "========================================"
+      - "✅ ИТОГОВАЯ СТАТИСТИКА DNS ОПЕРАЦИЙ"
+      - "========================================"
+      - >-
+          Всего записей в конфигурации: {{
+          (_cloudflare_flat_records |
+          default({}) | length) }}
+      - >-
+          Всего записей в Cloudflare: {{
+          (cloudflare_existing_records_id_map |
+          default({}) | length) }}
+      - "----------------------------------------"
+      - "УДАЛЕНИЕ УСТАРЕВШИХ ЗАПИСЕЙ:"
+      - >-
+          Найдено для удаления: {{
+          (records_to_delete |
+          default([]) | length) }}
+      - >-
+          Успешно удалено: {{
+          __cloudflare_dns_delete_result.results |
+          default([]) |
+          selectattr('failed', 'equalto', false) |
+          list | length if
+          __cloudflare_dns_delete_result
+          is defined else 0 }}
+      - >-
+          Ошибок при удалении: {{
+          __cloudflare_dns_delete_result.results |
+          default([]) |
+          selectattr('failed', 'equalto', true) |
+          list | length if
+          __cloudflare_dns_delete_result
+          is defined else 0 }}
+      - "----------------------------------------"
+      - "СОЗДАНИЕ/ОБНОВЛЕНИЕ ЗАПИСЕЙ:"
+      - >-
+          Успешно обработано: {{
+          __cloudflare_dns_update_result.results |
+          default([]) |
+          selectattr('failed', 'equalto', false) |
+          list | length if
+          __cloudflare_dns_update_result
+          is defined else 0 }}
+      - >-
+          С ошибками: {{
+          __cloudflare_dns_update_result.results |
+          default([]) |
+          selectattr('failed', 'equalto', true) |
+          list | length if
+          __cloudflare_dns_update_result
+          is defined else 0 }}
+      - >-
+          Создано/обновлено: {{
+          __cloudflare_dns_update_result.results |
+          default([]) |
+          selectattr('changed', 'equalto', true) |
+          list | length if
+          __cloudflare_dns_update_result
+          is defined else 0 }}
+      - >-
+          Без изменений: {{
+          __cloudflare_dns_update_result.results |
+          default([]) |
+          selectattr('changed', 'equalto', false) |
+          selectattr('failed', 'equalto', false) |
+          list | length if
+          __cloudflare_dns_update_result
+          is defined else 0 }}
+      - "========================================"

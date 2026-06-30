@@ -1,0 +1,231 @@
+<?php
+$CONFIG = array (
+    // ========== БАЗОВЫЕ НАСТРОЙКИ ==========
+        'instanceid' => '{{ nextcloud_existing_instanceid | default("oc" ~ range(1000000000, 9999999999) | random) }}',
+        'passwordsalt' => '{{ nextcloud_existing_passwordsalt | default(ansible_date_time.epoch | hash("sha256")) }}',
+        'secret' => '{{ nextcloud_existing_secret | default(ansible_date_time.iso8601_basic_short | hash("sha256")) }}',
+    
+    // ========== НАСТРОЙКИ ЛИМИТОВ ==========
+    'ratelimit' => array (
+        'enabled' => {{ nextcloud_ratelimit_enabled | default(false) | lower }},
+    ),
+    'rate_limit' => array (
+        'enabled' => {{ nextcloud_rate_limit_enabled | default(false) | lower }},
+        'api' => array (
+            'enabled' => {{ nextcloud_rate_limit_api_enabled | default(false) | lower }},
+        ),
+        'webdav' => array (
+            'enabled' => {{ nextcloud_rate_limit_webdav_enabled | default(false) | lower }},
+        ),
+    ),
+    
+    // ========== ДОМЕНЫ ==========
+    'trusted_domains' => array (
+        0 => '{{ nextcloud_domain | default("box.dla.su") }}',
+        1 => 'localhost',
+        2 => '127.0.0.1',
+        {% for domain in nextcloud_extra_domains | default([])  %}
+        {{ loop.index + 2 }} => '{{ domain }}',
+        {% endfor  %}
+    ),
+    
+
+    // ========== ДАННЫЕ ==========
+    'datadirectory' => '{{ nextcloud_data_dir | default("/var/www/nextcloud/data") }}',
+    
+    // ========== БАЗА ДАННЫХ ==========
+    'dbtype' => '{{ nextcloud_db_type | default("mysql") }}',
+    'version' => '{{ nextcloud_version | default("33.0.0.16") }}',
+    'dbname' => '{{ nextcloud_db_name | default("nextcloud") }}',
+    'dbhost' => '{{ nextcloud_db_host | default("localhost") }}',
+    'dbport' => '{{ nextcloud_db_port | default("") }}',
+    'dbtableprefix' => '{{ nextcloud_db_table_prefix | default("oc_") }}',
+    'mysql.utf8mb4' => {{ nextcloud_mysql_utf8mb4 | default(true) | lower }},
+    'dbuser' => '{{ nextcloud_db_user | default("nextcloud") }}',
+    'dbpassword' => '{{ nextcloud_db_password }}',
+    'installed' => {{ nextcloud_installed | default(true) | lower }},
+    
+    // ========== КЭШИРОВАНИЕ ==========
+    'memcache.local' => '{{ nextcloud_memcache_local | default("\\OC\\Memcache\\APCu") }}',
+    'memcache.distributed' => '{{ nextcloud_memcache_distributed | default("\\OC\\Memcache\\Redis") }}',
+    'memcache.locking' => '{{ nextcloud_memcache_locking | default("\\OC\\Memcache\\Redis") }}',
+    'redis' => array (
+        'host' => '{{ redis_host | default("127.0.0.1") }}',
+        'port' => {{ redis_port | default(6379) }},
+        'timeout' => {{ redis_timeout | default(0.5) }},
+        'dbindex' => {{ redis_dbindex | default(0) }},
+        {% if redis_password is defined and redis_password  %}
+        'password' => '{{ redis_password }}',
+        {% endif  %}
+    ),
+    
+    // ========== НАСТРОЙКИ БАЗЫ ДАННЫХ ==========
+    'dbpersistent' => {{ nextcloud_db_persistent | default(false) | lower }},
+    
+    // ========== ФАЙЛОВЫЕ БЛОКИРОВКИ ==========
+    'filelocking.enabled' => {{ nextcloud_filelocking_enabled | default(true) | lower }},
+    'filelocking.ttl' => {{ nextcloud_filelocking_ttl | default(3600) }},
+    
+    // ========== МЕДИА И ПРЕВЬЮ ==========
+    'preview_ffmpeg_path' => '{{ nextcloud_preview_ffmpeg_path | default("/usr/bin/ffmpeg") }}',
+    'enable_previews' => {{ nextcloud_enable_previews | default(true) | lower }},
+    'preview_concurrency' => {{ nextcloud_preview_concurrency | default(1) }},
+    'preview_max_x' => {{ nextcloud_preview_max_x | default(2048) }},
+    'preview_max_y' => {{ nextcloud_preview_max_y | default(2048) }},
+    'preview_max_scale_factor' => {{ nextcloud_preview_max_scale_factor | default(2) }},
+    'preview_max_filesize_image' => {{ nextcloud_preview_max_filesize_image | default(5000) }},
+    'preview_lazy_loading' => {{ nextcloud_preview_lazy_loading | default(true) | lower }},
+    'enabledPreviewProviders' => array (
+        'OC\\Preview\\BMP',
+        'OC\\Preview\\GIF',
+        'OC\\Preview\\HEIC',
+        'OC\\Preview\\Image',
+        'OC\\Preview\\JPEG',
+        'OC\\Preview\\Krita',
+        'OC\\Preview\\MarkDown',
+        'OC\\Preview\\MP3',
+        'OC\\Preview\\MP4',
+        'OC\\Preview\\MOV',
+        'OC\\Preview\\OpenDocument',
+        'OC\\Preview\\PNG',
+        'OC\\Preview\\TXT',
+        'OC\\Preview\\XBitmap',
+        // Add only providers you actually need
+    ),
+    // ========== ПАГИНАЦИЯ И ШАРЫ ==========
+    'default_pagination_limit' => {{ nextcloud_default_pagination_limit | default(50) }},
+    'share_folder' => '{{ nextcloud_share_folder | default("/Shared") }}',
+    
+    // ========== КОРЗИНА ==========
+    'trashbin_retention_obligation' => '{{ nextcloud_trashbin_retention | default("auto, 30") }}',
+    
+    // ========== ЛОГИРОВАНИЕ ==========
+    'logtimezone' => '{{ nextcloud_log_timezone | default("UTC") }}',
+    'log_rotate_size' => {{ nextcloud_log_rotate_size | default(52428800) }},
+    'logfile' => '{{ nextcloud_log_file | default("/var/log/nextcloud/nextcloud.log") }}',
+    'loglevel' => {{ nextcloud_log_level | default(2) }},
+    'syslog_tag' => '{{ nextcloud_syslog_tag | default("Nextcloud") }}',
+    
+    // ========== ФОНОВЫЕ ЗАДАЧИ ==========
+    'cron_log' => {{ nextcloud_cron_log | default(false) | lower }},
+    'backgroundjobs_mode' => '{{ nextcloud_backgroundjobs_mode | default("cron") }}',
+    
+    // ========== ОБСЛУЖИВАНИЕ ==========
+    'maintenance_window_start' => {{ nextcloud_maintenance_window_start | default(0) }},
+    
+    // ========== СЕССИИ ==========
+    'session_lifetime' => {{ nextcloud_session_lifetime | default(86400) }},
+    'session_keepalive' => {{ nextcloud_session_keepalive | default(true) | lower }},
+    'remember_login_cookie_lifetime' => {{ nextcloud_remember_login_cookie_lifetime | default(1296000) }},
+    
+    // ========== ОБНОВЛЕНИЯ ==========
+    'update_checker' => {{ nextcloud_update_checker | default(false) | lower }},
+    'upgrade.disable-web' => {{ nextcloud_upgrade_disable_web | default(true) | lower }},
+    'updater.server.url' => '{{ nextcloud_updater_server_url | default("https://updates.nextcloud.com/updater_server/") }}',
+    
+    // ========== URL И ПРОТОКОЛЫ ==========
+    'overwriteprotocol' => '{{ nextcloud_overwrite_protocol | default("https") }}',
+    'overwrite.cli.url' => '{{ nextcloud_overwrite_cli_url | default("https://" ~ nextcloud_domain | default("box.dla.su")) }}',
+    'htaccess.RewriteBase' => '{{ nextcloud_htaccess_rewrite_base | default("/") }}',
+    
+    // ========== S3 OBJECT STORAGE ==========
+    {% if nextcloud_s3_bucket is defined and nextcloud_s3_bucket  %}
+    // Основное хранилище файлов
+    'objectstore' => array (
+        'class' => 'OC\\Files\\ObjectStore\\S3',
+        'arguments' => array (
+            'bucket' => '{{ nextcloud_s3_bucket }}',
+            'key' => '{{ _nextcloud_s3_access_key }}',
+            'secret' => '{{ _nextcloud_s3_secret_key }}',
+            'hostname' => '{{ nextcloud_s3_hostname | default("s3.cloud.ru") }}',
+            'port' => {{ nextcloud_s3_port | default(443) }},
+            'region' => '{{ nextcloud_s3_region | default("ru-central-1") }}',
+            'use_ssl' => {{ nextcloud_s3_use_ssl | default(true) | lower }},
+            'use_path_style' => {{ nextcloud_s3_use_path_style | default(true) | lower }},
+            'legacy_auth' => {{ nextcloud_s3_legacy_auth | default(false) | lower }},
+            'timeout' => {{ nextcloud_s3_timeout | default(15) }},
+            'max_attempts' => {{ nextcloud_s3_max_attempts | default(3) }},
+            'multipart_upload_part_size' => {{ nextcloud_s3_multipart_upload_part_size | default(104857600) }},
+            'multipart_copy_part_size' => {{ nextcloud_s3_multipart_copy_part_size | default(104857600) }},
+            'cache_controller' => {{ nextcloud_s3_cache_controller | default(true) | lower }},
+        ),
+    ),
+    's3_bucket_url' => 'https://{{ nextcloud_s3_hostname | default("s3.cloud.ru") }}',
+    {% endif  %}
+    // ========== ФАЙЛОВЫЕ ОГРАНИЧЕНИЯ ==========
+    'max_filesize_animated_gifs_public_sharing' => {{ nextcloud_max_filesize_animated_gifs | default(10) }},
+    'max_chunk_size' => {{ nextcloud_max_chunk_size | default(104857600) }},
+    
+    // ========== ВЕРСИОНИРОВАНИЕ ==========
+    'versions_retention_obligation' => '{{ nextcloud_versions_retention | default("auto, 30") }}',
+    'versions_retention_obligation_app' => '{{ nextcloud_versions_retention_app | default("auto, 30") }}',
+    
+    // ========== ПОИСК ==========
+    'search_min_length' => {{ nextcloud_search_min_length | default(2) }},
+    'search_max_results' => {{ nextcloud_search_max_results | default(100) }},
+    
+    // ========== БЕЗОПАСНОСТЬ ==========
+    'forwarded_for_headers' => array (
+        {% for header in nextcloud_forwarded_for_headers | default(["HTTP_X_FORWARDED_FOR"])  %}
+        '{{ header }}',
+        {% endfor  %}
+    ),
+    'knowledgebase_enabled' => {{ nextcloud_knowledgebase_enabled | default(false) | lower }},
+    'check_for_working_htaccess' => {{ nextcloud_check_htaccess | default(false) | lower }},
+    
+    // ========== ФАЙЛОВАЯ СИСТЕМА ==========
+    'filesystem_check_changes' => {{ nextcloud_filesystem_check_changes | default(0) }},
+    'enable_certificate_verification' => {{ nextcloud_enable_cert_verification | default(true) | lower }},
+    'allow_local_remote_servers' => {{ nextcloud_allow_local_remote | default(false) | lower }},
+    
+    // ========== АССЕТЫ ==========
+    'asset-pipeline.enabled' => {{ nextcloud_asset_pipeline_enabled | default(false) | lower }},
+    'asset-pipeline.css' => {{ nextcloud_asset_pipeline_css | default(false) | lower }},
+    'asset-pipeline.js' => {{ nextcloud_asset_pipeline_js | default(false) | lower }},
+    
+    // ========== ПОЧТОВЫЕ НАСТРОЙКИ ==========
+    'mail_smtpmode' => '{{ nextcloud_mail_smtpmode | default("sendmail") }}',
+    {% if nextcloud_mail_smtpmode is defined and nextcloud_mail_smtpmode == 'smtp'  %}
+    'mail_smtpsecure' => '{{ nextcloud_mail_smtpsecure | default("tls") }}',
+    'mail_smtpauthtype' => '{{ nextcloud_mail_smtpauthtype | default("LOGIN") }}',
+    'mail_smtpauth' => {{ nextcloud_mail_smtpauth | default(true) | lower }},
+    'mail_smtphost' => '{{ nextcloud_mail_smtphost }}',
+    'mail_smtpport' => {{ nextcloud_mail_smtpport | default(587) }},
+    'mail_smtpname' => '{{ nextcloud_mail_smtpname }}',
+    'mail_smtppassword' => '{{ nextcloud_mail_smtppassword }}',
+    'mail_sendmail_mode' => 'smtp',
+    'mail_from_address' => '{{ nextcloud_mail_from_address | default("nextcloud") }}',
+    'mail_domain' => '{{ nextcloud_mail_domain | default(nextcloud_domain | default("box.dla.su")) }}',
+    {% endif  %}
+    
+    // ========== ЛОКАЛИЗАЦИЯ ==========
+    'default_language' => '{{ nextcloud_default_language | default("ru") }}',
+    'default_locale' => '{{ nextcloud_default_locale | default("ru_RU") }}',
+    'default_phone_region' => '{{ nextcloud_default_phone_region | default("RU") }}',
+    'force_language' => {{ nextcloud_force_language | default(false) | lower }},
+    'force_locale' => {{ nextcloud_force_locale | default(false) | lower }},
+    
+    // ========== WEBDAV ==========
+    'dav.enable.tech_details' => {{ nextcloud_dav_enable_tech_details | default(false) | lower }},
+    'dav.calendar.caldav.cache' => {{ nextcloud_dav_caldav_cache | default(true) | lower }},
+    
+    // ========== ИНТЕРНЕТ ==========
+    'has_internet_connection' => {{ nextcloud_has_internet | default(true) | lower }},
+    'max_upload_limit_reached_notification' => {{ nextcloud_max_upload_notification | default(false) | lower }},
+    
+    // ========== ТЕМЫ ==========
+    'theming.cache' => {{ nextcloud_theming_cache | default(true) | lower }},
+    'theming.disabled' => {{ nextcloud_theming_disabled | default(false) | lower }},
+    
+    // ========== ОБСЛУЖИВАНИЕ ==========
+    'maintenance' => {{ nextcloud_maintenance | default(false) | lower }},
+);
+
+// ========== ДОПОЛНИТЕЛЬНАЯ ОПТИМИЗАЦИЯ PHP ==========
+if (PHP_SAPI === 'cli') {
+    @ini_set('memory_limit', '{{ nextcloud_cli_memory_limit | default("1024M") }}');
+} else {
+    @ini_set('memory_limit', '{{ nextcloud_web_memory_limit | default("512M") }}');
+    @ini_set('max_execution_time', {{ nextcloud_max_execution_time | default(3600) }});
+    @ini_set('max_input_time', {{ nextcloud_max_input_time | default(3600) }});
+}

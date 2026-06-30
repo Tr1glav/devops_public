@@ -1,0 +1,38 @@
+---
+- name: Add PHP repository
+  ansible.builtin.apt_repository:
+    repo: "ppa:ondrej/php"
+    state: present
+
+- name: Update package cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Install required packages
+  ansible.builtin.apt:
+    name:
+      - acl
+      - nginx
+      - php{{ nextcloud_php_version }}-fpm
+      - php{{ nextcloud_php_version }}-cli
+      - php{{ nextcloud_php_version }}-common
+      - php{{ nextcloud_php_version }}-mysql
+      - php{{ nextcloud_php_version }}-xml
+      - php{{ nextcloud_php_version }}-curl
+      - php{{ nextcloud_php_version }}-gd
+      - php{{ nextcloud_php_version }}-intl
+      - php{{ nextcloud_php_version }}-mbstring
+      - php{{ nextcloud_php_version }}-zip
+      - php{{ nextcloud_php_version }}-bcmath
+      - php{{ nextcloud_php_version }}-imagick
+      - php{{ nextcloud_php_version }}-redis
+      - php{{ nextcloud_php_version }}-apcu
+      - mariadb-server
+      - mariadb-client
+      - python3-pymysql
+      - redis-server
+      - ffmpeg
+      - unzip
+      - curl
+    state: present

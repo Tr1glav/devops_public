@@ -1,0 +1,52 @@
+---
+- name: Configure PHP-FPM pool for Nextcloud
+  ansible.builtin.template:
+    src: nextcloud-pool.conf.j2
+    dest: /etc/php/{{ nextcloud_php_version }}/fpm/pool.d/nextcloud.conf
+    mode: '0644'
+  notify: Restart PHP-FPM
+
+- name: Configure PHP settings
+  ansible.builtin.lineinfile:
+    path: /etc/php/{{ nextcloud_php_version }}/fpm/php.ini
+    regexp: "^{{ item.key }}"
+    line: "{{ item.key }} = {{ item.value }}"
+    backup: true
+  loop:
+    - {key: "upload_max_filesize", value: "32G"}
+    - {key: "post_max_size", value: "32G"}
+    - {key: "memory_limit", value: "512M"}
+    - {key: "max_execution_time", value: "3600"}
+    - {key: "max_input_time", value: "36000"}
+    - {key: "output_buffering", value: "off"}
+    - {key: "date.timezone", value: "UTC"}
+  notify: Restart PHP-FPM
+
+- name: Configure Nginx for Nextcloud with SSL
+  ansible.builtin.template:
+    src: >-
+      {{ 'nextcloud-ssl.conf.j2'
+         if (_nextcloud_ssl_certificate != '' and
+           nextcloud_enable_ssl | default(true))
+         else 'nextcloud.conf.j2' }}
+    dest: /etc/nginx/sites-available/nextcloud
+    mode: '0644'
+  notify: Restart nginx
+
+- name: Enable Nextcloud site in Nginx
+  ansible.builtin.file:
+    src: /etc/nginx/sites-available/nextcloud
+    dest: /etc/nginx/sites-enabled/nextcloud
+    state: link
+  notify: Restart nginx
+
+- name: Disable default Nginx site
+  ansible.builtin.file:
+    path: /etc/nginx/sites-enabled/default
+    state: absent
+  notify: Restart nginx
+
+- name: Make occ executable
+  ansible.builtin.file:
+    path: /var/www/nextcloud/occ
+    mode: '0755'

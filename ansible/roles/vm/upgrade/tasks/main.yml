@@ -1,0 +1,27 @@
+---
+- name: Update apt package index
+  ansible.builtin.apt:
+    update_cache: true
+
+- name: Install gnupg2
+  ansible.builtin.apt:
+    name: gnupg2
+    state: present
+
+- name: Full upgrade
+  ansible.builtin.apt:
+    upgrade: dist
+    autoremove: true
+    autoclean: true
+
+- name: Install packages
+  ansible.builtin.apt:
+    name:
+      - software-properties-common
+      - curl
+      - python3
+      - python3-pip
+      - python3-venv
+      - python3-hvac
+    state: present
+    update_cache: true

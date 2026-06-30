@@ -1,0 +1,289 @@
+---
+- name: Validate required variables
+  ansible.builtin.assert:
+    that:
+      - postgres_version is defined
+      - vault_addr is defined
+      - vault_token is defined
+      - vault_mount is defined
+      - vault_path is defined
+      - groups['etcd-standalone'] is defined or groups['etcd'] is defined
+    msg: "One or more required variables are missing"
+  run_once: true
+  tags: [validation]
+
+- name: Get etcd host
+  ansible.builtin.set_fact:
+    postgres_etcd_host: >-
+      {{
+        hostvars[
+          groups['etcd-standalone'][0] | default(groups['etcd'][0])
+        ].ansible_host
+        | default(
+          hostvars[
+            groups['etcd-standalone'][0] | default(groups['etcd'][0])
+          ].inventory_hostname
+        )
+      }}
+  run_once: true
+  tags: [validation]
+
+- name: Check etcd cluster availability
+  ansible.builtin.wait_for:
+    host: "{{ postgres_etcd_host }}"
+    port: 2379
+    timeout: 30
+  run_once: true
+  tags: [validation, etcd]
+
+# ========== PostgreSQL block ==========
+- name: Ensure keyring directory exists
+  ansible.builtin.file:
+    path: "/etc/apt/keyrings"
+    state: directory
+    mode: '0755'
+  when: ansible_os_family == 'Debian'
+  tags: [packages, postgresql]
+
+- name: Configure PostgreSQL repository
+  tags: [packages, postgresql]
+  block:
+    - name: Remove old repository files
+      ansible.builtin.file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/apt/sources.list.d/postgresql.list
+        - /etc/apt/trusted.gpg.d/postgresql.gpg
+        - /etc/apt/keyrings/postgresql.asc
+
+    - name: Download PostgreSQL GPG key
+      ansible.builtin.get_url:
+        url: "https://apt.postgresql.org/pub/repos/apt/ACCC4CF8.asc"
+        dest: "/etc/apt/keyrings/postgresql.asc"
+        mode: '0644'
+      when: ansible_os_family == 'Debian'
+
+    - name: Convert key to gpg format
+      ansible.builtin.command: >-
+        gpg --dearmor -o /etc/apt/keyrings/postgresql.gpg
+        /etc/apt/keyrings/postgresql.asc
+      args:
+        creates: /etc/apt/keyrings/postgresql.gpg
+      when: ansible_os_family == 'Debian'
+      changed_when: false
+
+    - name: Add PostgreSQL repository
+      ansible.builtin.apt_repository:
+        repo: >-
+          deb [arch=amd64 signed-by=/etc/apt/keyrings/postgresql.gpg]
+          https://apt.postgresql.org/pub/repos/apt
+          {{ ansible_distribution_release }}-pgdg main
+        state: present
+        filename: postgresql
+        update_cache: false
+      when: ansible_os_family == 'Debian'
+
+    - name: Update apt cache
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+      when: ansible_os_family == 'Debian'
+
+# ========== Vault block ==========
+- name: Retrieve secrets from Vault
+  become: false
+  ansible.builtin.uri:
+    url: "{{ vault_addr }}/v1/{{ vault_mount }}/data/{{ vault_path }}/patroni"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ vault_token }}"
+    return_content: true
+    validate_certs: "{{ vault_validate_certs | default(true) }}"
+    status_code: 200
+  register: postgres_vault_secrets
+  no_log: true
+  delegate_to: localhost
+  tags: [secrets, vault]
+
+- name: Parse Vault secrets
+  become: false
+  ansible.builtin.set_fact:
+    patroni_restapi_password: >-
+      {{ postgres_vault_secrets.json.data.data.restapi_password }}
+    postgres_superuser_password: >-
+      {{ postgres_vault_secrets.json.data.data.superuser_password }}
+    replication_password: >-
+      {{ postgres_vault_secrets.json.data.data.replication_password }}
+    pgbouncer_auth_user_password: >-
+      {{ postgres_vault_secrets.json.data.data.pgbouncer_auth_password |
+      default(postgres_vault_secrets.json.data.data.replication_password) }}
+    pgbouncer_admin_password: >-
+      {{ postgres_vault_secrets.json.data.data.pgbouncer_admin_password |
+      default(postgres_vault_secrets.json.data.data.restapi_password) }}
+  no_log: true
+  delegate_to: localhost
+  tags: [secrets, vault]
+
+- name: Validate required secrets
+  become: false
+  ansible.builtin.assert:
+    that:
+      - patroni_restapi_password | length > 0
+      - postgres_superuser_password | length > 0
+      - replication_password | length > 0
+    msg: "One or more required secrets are missing or empty"
+  no_log: true
+  delegate_to: localhost
+  tags: [secrets, vault]
+
+# ========== System preparation block ==========
+- name: Check for existing data directory
+  ansible.builtin.stat:
+    path: "/var/lib/postgresql/{{ postgres_version }}/main"
+  register: postgres_pg_data_dir_exists
+  changed_when: false
+  tags: [postgresql, data]
+
+- name: Check for existing PostgreSQL cluster
+  ansible.builtin.stat:
+    path: "/var/lib/postgresql/{{ postgres_version }}/main/PG_VERSION"
+  register: postgres_pg_cluster_exists
+  changed_when: false
+  tags: [postgresql, data]
+
+- name: Create system groups
+  ansible.builtin.group:
+    name: "{{ item.name }}"
+    state: present
+    system: true
+  loop:
+    - {name: "{{ postgres_group }}"}
+    - {name: "{{ patroni_group }}"}
+    - {name: "{{ pgbouncer_group }}"}
+  tags: [users]
+
+- name: Create system users
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    group: "{{ item.group }}"
+    system: true
+    shell: /bin/bash
+    home: "{{ item.home }}"
+    create_home: true
+    state: present
+  loop:
+    - >-
+      {name: "{{ patroni_user }}", group: "{{ patroni_group }}",
+      home: "{{ patroni_home }}"}
+    - >-
+      {name: "{{ pgbouncer_user }}", group: "{{ pgbouncer_group }}",
+      home: "/var/lib/{{ pgbouncer_user }}"}
+  tags: [users]
+
+- name: Install patroni from src
+  ansible.builtin.include_tasks: tasks/install_patroni_src.yaml
+
+- name: Ensure PostgreSQL binaries are installed
+  ansible.builtin.apt:
+    name: "postgresql-{{ postgres_version }}"
+    state: present
+    update_cache: true
+  environment:
+    DEBIAN_FRONTEND: noninteractive
+  when: ansible_os_family == 'Debian'
+  notify: stop and disable postgresql
+  tags: [packages, postgresql]
+
+- name: Ensure Patroni configuration directory exists
+  ansible.builtin.file:
+    path: /etc/patroni
+    state: directory
+    owner: "{{ patroni_user }}"
+    group: "{{ patroni_group }}"
+    mode: '0750'
+  tags: [patroni, config]
+
+- name: Ensure Postgres run directory exists
+  ansible.builtin.file:
+    path: /var/run/postgresql
+    state: directory
+    owner: "{{ patroni_user }}"
+    group: "{{ patroni_group }}"
+    mode: '0750'
+    recurse: true
+  tags: [patroni, config]
+
+- name: Ensure Postgres files directory exists
+  ansible.builtin.file:
+    path: /var/lib/postgresql/{{ postgres_version }}/main
+    state: directory
+    owner: "{{ patroni_user }}"
+    group: "{{ patroni_group }}"
+    mode: '0750'
+    recurse: true
+  tags: [patroni, config]
+
+- name: Ensure Patroni configuration is up to date
+  ansible.builtin.template:
+    src: patroni.yml.j2
+    dest: /etc/patroni/patroni.yml
+    owner: "{{ patroni_user }}"
+    group: "{{ patroni_group }}"
+    mode: '0640'
+  register: postgres_patroni_config
+  notify: restart patroni
+  tags: [patroni, config]
+
+- name: Ensure Patroni systemd service is configured
+  ansible.builtin.template:
+    src: patroni.service.j2
+    dest: /etc/systemd/system/patroni.service
+    owner: root
+    group: root
+    mode: '0644'
+  register: postgres_patroni_service
+  notify: reload systemd and restart patroni
+  tags: [patroni, systemd]
+
+# ========== Patroni startup block ==========
+- name: Ensure PostgreSQL is stopped and disabled
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: false
+  loop:
+    - "postgresql"
+    - "postgresql@{{ postgres_version }}-main"
+  when: ansible_os_family == 'Debian'
+  tags: [postgresql, systemd]
+
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: true
+  tags: [systemd]
+
+- name: Add patroni user to postgres group
+  ansible.builtin.user:
+    name: "{{ patroni_user }}"
+    groups: "{{ postgres_group }}"
+    append: true
+  tags: [patroni, users]
+
+- name: Ensure Patroni is enabled
+  ansible.builtin.systemd:
+    name: patroni
+    enabled: true
+    daemon_reload: true
+  tags: [patroni, systemd]
+
+- name: Check leader
+  ansible.builtin.include_tasks: tasks/check_leader.yml
+
+- name: Initdb
+  ansible.builtin.include_tasks: tasks/patroni_bootstrap.yaml
+  when: postgres_global_no_leader
+
+- name: Check leader
+  ansible.builtin.include_tasks: tasks/check_leader.yml
+  when: postgres_global_no_leader

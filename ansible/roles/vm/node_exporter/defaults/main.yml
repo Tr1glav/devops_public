@@ -1,0 +1,15 @@
+---
+node_exporter_version: "1.10.2"
+node_exporter_user: "node_exporter"
+node_exporter_group: "node_exporter"
+node_exporter_dir: "/opt/node_exporter"
+
+# node_exporter_url: >-
+#   https://github.com/prometheus/node_exporter/releases/download/v{{
+#   node_exporter_version }}/node_exporter-{{ node_exporter_version
+#   }}.linux-amd64.tar.gz
+node_exporter_url: >-
+  https://github-cache.dla-dev.dla.su/github/prometheus
+  /node_exporter/releases/download/v{{ node_exporter_version
+  }}/node_exporter-{{ node_exporter_version }}
+  .linux-amd64.tar.gz

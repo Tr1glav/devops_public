@@ -1,0 +1,32 @@
+---
+- name: Check cluster state
+  ansible.builtin.command:
+    cmd: "vault operator raft list-peers -format=json"
+  environment:
+    VAULT_ADDR: "{{ vault_api_addr }}"
+    VAULT_TOKEN: "{{ vault_root_token }}"
+  register: _vault_raft_peers
+  when: inventory_hostname == groups['vault']|first
+  changed_when: false
+
+- name: Check final status
+  ansible.builtin.command:
+    cmd: "vault status -format=json"
+  environment:
+    VAULT_ADDR: "{{ vault_api_addr }}"
+  register: _vault_status_final
+  when: inventory_hostname in groups['vault']
+  changed_when: false
+
+- name: Display cluster info
+  ansible.builtin.debug:
+    msg: |
+      Состояние Vault на {{ inventory_hostname }}:
+      - Инициализирован: {{ (_vault_status_final.stdout |
+          from_json).initialized | default('unknown') }}
+      - Запечатан: {{ (_vault_status_final.stdout |
+          from_json).sealed | default('unknown') }}
+      - Версия: {{ (_vault_status_final.stdout |
+          from_json).version | default('unknown') }}
+      - Узлы кластера: {{ _vault_raft_peers.stdout | default('unknown') }}
+  when: _vault_status_final.stdout is defined

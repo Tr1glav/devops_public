@@ -1,0 +1,6 @@
+---
+- name: Deploy meshcore bot
+  hosts: meshcore
+  become: true
+  roles:
+    - meshcore

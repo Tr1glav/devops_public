@@ -1,0 +1,4 @@
+auto {{ haproxy_vip_interface }}:haproxy_vip
+iface {{ haproxy_vip_interface }}:haproxy_vip inet static
+    address {{ haproxy_vip_address.split('/')[0] }}
+    netmask {{ (haproxy_vip_address.split('/')[1] | int) | ansible.utils.ipaddr('netmask') }}

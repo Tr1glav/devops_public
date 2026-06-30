@@ -1,0 +1,25 @@
+---
+- name: Restart authentik-server
+  ansible.builtin.service:
+    name: authentik-server
+    state: restarted
+
+- name: Restart authentik-worker
+  ansible.builtin.service:
+    name: authentik-worker
+    state: restarted
+
+- name: Reload nginx
+  ansible.builtin.service:
+    name: nginx
+    state: reloaded
+
+- name: Restart postgresql
+  ansible.builtin.service:
+    name: postgresql
+    state: restarted
+
+- name: Restart redis-server
+  ansible.builtin.service:
+    name: redis-server
+    state: restarted

@@ -1,0 +1,218 @@
+---
+- name: Install system dependencies
+  ansible.builtin.apt:
+    name:
+      - build-essential
+      - libssl-dev
+      - libreadline-dev
+      - zlib1g-dev
+      - libcurl4-openssl-dev
+      - libpq-dev
+      - libmagickwand-dev
+      - imagemagick
+      - curl
+      - wget
+      - git
+      - postgresql
+      - postgresql-contrib
+      - apache2
+      - libapache2-mod-passenger
+      - libapache2-mod-security2
+      - ruby
+      - ruby-dev
+      - gem
+    state: present
+    update_cache: true
+
+- name: Install bundler gem
+  community.general.gem:
+    name: bundler
+    state: present
+    executable: /usr/bin/gem
+
+- name: Create redmine user
+  ansible.builtin.user:
+    name: "{{ redmine_user }}"
+    system: true
+    shell: /bin/bash
+    home: "{{ redmine_install_dir }}"
+    create_home: true
+
+- name: Create redmine directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ redmine_user }}"
+    group: "{{ redmine_user }}"
+    mode: '0755'
+  loop:
+    - "{{ redmine_install_dir }}"
+    - "{{ redmine_install_dir }}/files"
+    - "{{ redmine_install_dir }}/tmp"
+    - "{{ redmine_install_dir }}/log"
+    - "{{ redmine_install_dir }}/public/plugin_assets"
+    - "{{ redmine_attachments_storage_path }}"
+
+- name: Clone redmine repository
+  ansible.builtin.git:
+    repo: "https://github.com/redmine/redmine.git"
+    dest: "{{ redmine_install_dir }}"
+    version: "{{ redmine_version }}"
+    depth: 1
+    force: true
+  become: true
+  become_user: "{{ redmine_user }}"
+
+- name: Configure database.yml
+  ansible.builtin.template:
+    src: database.yml.j2
+    dest: "{{ redmine_install_dir }}/config/database.yml"
+    owner: "{{ redmine_user }}"
+    group: "{{ redmine_user }}"
+    mode: '0600'
+
+- name: Configure configuration.yml
+  ansible.builtin.template:
+    src: configuration.yml.j2
+    dest: "{{ redmine_install_dir }}/config/configuration.yml"
+    owner: "{{ redmine_user }}"
+    group: "{{ redmine_user }}"
+    mode: '0600'
+
+- name: Generate secret_key_base if not provided
+  ansible.builtin.set_fact:
+    redmine_secret_key_base: >-
+      {{ lookup('password',
+      '/dev/null length=' ~ redmine_secret_key_len ~
+      ' chars=ascii_letters,digits,special') }}
+  when: redmine_secret_key_base | length == 0
+
+- name: Generate session store secret
+  ansible.builtin.set_fact:
+    redmine_secret_token: >-
+      {{ lookup('password',
+      '/dev/null length=128 chars=ascii_letters,digits') }}
+  when: redmine_secret_key_base | length == 0
+
+- name: Configure additional configuration.rb
+  ansible.builtin.template:
+    src: additional_configuration.rb.j2
+    dest: "{{ redmine_install_dir }}/config/additional_environment.rb"
+    owner: "{{ redmine_user }}"
+    group: "{{ redmine_user }}"
+    mode: '0600'
+
+- name: Install gem dependencies
+  community.general.gem:
+    name: "{{ item }}"
+    state: present
+    user_install: false
+  loop:
+    - bundler
+    - rake
+  become: true
+
+- name: Setup PostgreSQL database
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_db:
+    name: "{{ redmine_db_name }}"
+    encoding: 'UTF-8'
+    lc_collate: 'en_US.UTF-8'
+    lc_ctype: 'en_US.UTF-8'
+    template: 'template0'
+
+- name: Setup PostgreSQL user
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_user:
+    name: "{{ redmine_db_user }}"
+    password: "{{ redmine_db_password }}"
+    db: "{{ redmine_db_name }}"
+    role_attr_flags: "CREATEDB,LOGIN"
+
+- name: Configure PostgreSQL connection
+  community.postgresql.postgresql_pg_hba:
+    dest: /etc/postgresql/*/main/pg_hba.conf
+    contype: host
+    databases: "{{ redmine_db_name }}"
+    users: "{{ redmine_db_user }}"
+    method: md5
+    address: "<hidden-ip>/32"
+  notify: restart postgresql
+
+- name: Install bundle with rake
+  ansible.builtin.command:
+    cmd: "bundle install --jobs=4 --retry=3"
+    chdir: "{{ redmine_install_dir }}"
+  environment:
+    RAILS_ENV: production
+  become: true
+  become_user: "{{ redmine_user }}"
+  changed_when: false
+
+- name: Generate database schema
+  ansible.builtin.command:
+    cmd: "bundle exec rake db:migrate RAILS_ENV=production"
+    chdir: "{{ redmine_install_dir }}"
+  become: true
+  become_user: "{{ redmine_user }}"
+  changed_when: false
+
+- name: Precompile assets
+  ansible.builtin.command:
+    cmd: "bundle exec rake assets:precompile RAILS_ENV=production"
+    chdir: "{{ redmine_install_dir }}"
+  become: true
+  become_user: "{{ redmine_user }}"
+  changed_when: false
+
+- name: Set correct permissions on redmine directories
+  ansible.builtin.file:
+    path: "{{ redmine_install_dir }}"
+    owner: "{{ redmine_user }}"
+    group: "{{ redmine_user }}"
+    recurse: true
+    mode: '0755'
+
+- name: Setup Apache virtual host
+  ansible.builtin.template:
+    src: redmine.conf.j2
+    dest: /etc/apache2/sites-available/redmine.conf
+    mode: '0644'
+  notify: restart apache
+
+- name: Enable redmine site
+  ansible.builtin.file:
+    src: /etc/apache2/sites-available/redmine.conf
+    dest: /etc/apache2/sites-enabled/redmine.conf
+    state: link
+  notify: restart apache
+
+- name: Disable default site
+  ansible.builtin.file:
+    path: /etc/apache2/sites-enabled/000-default.conf
+    state: absent
+  notify: restart apache
+
+- name: Enable required Apache modules
+  community.general.apache2_module:
+    name: "{{ item }}"
+    state: present
+  loop:
+    - passenger
+    - rewrite
+    - headers
+  notify: restart apache
+
+- name: Ensure Apache is running and enabled
+  ansible.builtin.service:
+    name: apache2
+    enabled: true
+    state: started
+
+- name: Wait for Apache to be ready
+  ansible.builtin.wait_for:
+    port: 80
+    delay: 5
+    timeout: 30

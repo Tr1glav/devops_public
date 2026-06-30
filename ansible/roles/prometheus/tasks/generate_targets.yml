@@ -1,0 +1,51 @@
+---
+- name: Get all servers
+  ansible.builtin.add_host:
+    name: "{{ item }}"
+    groups: prometheus_targets
+  loop: "{{ groups['all'] }}"
+
+- name: Ensure targets directory exists with correct permissions
+  ansible.builtin.file:
+    path: "/opt/prometheus/targets"
+    state: directory
+    owner: prometheus
+    group: prometheus
+    mode: '0775'
+
+- name: Create node exporter targets file
+  ansible.builtin.copy:
+    content: |
+      [
+        {% for host in groups.prometheus_targets %}
+        {
+          "targets": ["{{ hostvars[host].ansible_host | default(host) }}:9100"],
+          "labels": {
+            "env": "{{ env }}",
+            "hostname": "{{ host }}",
+            "groups": >-
+              {{ hostvars[host].group_names |
+              reject('eq', 'prometheus_targets') |
+              join(',') }}
+          }
+        }{% if not loop.last %},{% endif %}
+        {% endfor %}
+      ]
+    dest: "/opt/prometheus/targets/node_exporter.json"
+    owner: prometheus
+    group: prometheus
+    mode: '0644'
+
+- name: Verify directory permissions
+  ansible.builtin.command:
+    cmd: ls -ld /opt/prometheus/targets
+  register: dir_check
+  changed_when: false
+
+- name: Set SELinux context
+  community.general.sefcontext:
+    target: "/opt/prometheus/targets(/.*)?"
+    setype: prometheus_var_lib_t
+    state: present
+  when: ansible_selinux.status == "enabled"
+  notify: restart prometheus

@@ -1,0 +1,59 @@
+---
+- name: Check if local file exists
+  ansible.builtin.stat:
+    path: "/tmp/vault_{{ vault_version }}_linux_amd64.zip"
+  register: vault_local_vault_file
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Download Vault locally if file does not exist
+  ansible.builtin.get_url:
+    url: >-
+      https://releases.hashicorp.com/vault/{{ vault_version
+      }}/vault_{{ vault_version }}_linux_amd64.zip
+    dest: "/tmp/vault_{{ vault_version }}_linux_amd64.zip"
+    checksum: >-
+      sha256:https://releases.hashicorp.com/vault/{{ vault_version
+      }}/vault_{{ vault_version }}_SHA256SUMS
+    mode: '0644'
+  delegate_to: localhost
+  become: false
+  when: not vault_local_vault_file.stat.exists
+  run_once: true
+
+- name: Copy Vault to remote host
+  ansible.builtin.copy:
+    src: "/tmp/vault_{{ vault_version }}_linux_amd64.zip"
+    dest: "/tmp/vault.zip"
+    mode: '0644'
+
+- name: Check downloaded file
+  ansible.builtin.stat:
+    path: "/tmp/vault.zip"
+  register: _vault_zip
+
+- name: Extract Vault
+  ansible.builtin.unarchive:
+    src: "/tmp/vault.zip"
+    dest: "/usr/local/bin"
+    remote_src: true
+    mode: '0755'
+    owner: root
+    group: root
+    extra_opts: ["-j"]
+  when: _vault_zip.stat.exists
+
+- name: Check binary exists
+  ansible.builtin.stat:
+    path: "/usr/local/bin/vault"
+  register: vault_binary
+  when: _vault_zip.stat.exists
+
+- name: Set symlink
+  ansible.builtin.file:
+    src: "/usr/local/bin/vault"
+    dest: "/usr/bin/vault"
+    state: link
+    force: true
+  when: vault_binary.stat.exists

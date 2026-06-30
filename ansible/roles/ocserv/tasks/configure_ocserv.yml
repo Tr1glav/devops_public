@@ -1,0 +1,28 @@
+---
+- name: Deploy ocserv configuration
+  ansible.builtin.template:
+    src: ocserv.conf.j2
+    dest: /etc/ocserv/ocserv.conf
+    mode: '0600'
+  notify: Restart ocserv
+
+- name: Setup iptables masquerade (NAT)
+  ansible.builtin.iptables:
+    table: nat
+    chain: POSTROUTING
+    jump: MASQUERADE
+    source: "{{ ocserv_ip_range }}"
+    out_interface: "{{ ansible_default_ipv4.interface }}"
+    comment: "ocserv masquerade"
+
+- name: Ensure iptables rules are saved
+  ansible.builtin.shell:
+    cmd: iptables-save > /etc/iptables/rules.v4
+  changed_when: false
+  when: ansible_os_family == "Debian"
+
+- name: Start and enable ocserv
+  ansible.builtin.systemd:
+    name: ocserv
+    state: started
+    enabled: true

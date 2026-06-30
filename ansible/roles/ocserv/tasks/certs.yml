@@ -1,0 +1,64 @@
+---
+- name: Write certificate config file
+  ansible.builtin.copy:
+    content: |
+      cn = "{{ ocserv_hostname | default(ansible_hostname) }}"
+      organization = "VPN Server"
+      expiration_days = 3650
+      signing_key
+      encryption_key
+      tls_www_server
+    dest: /tmp/cert.cfg
+    mode: '0644'
+  when: ocserv_use_self_signed
+
+- name: Generate private key
+  ansible.builtin.command: >-
+    certtool --generate-privkey --outfile {{ ocserv_key_path }}
+  args:
+    creates: "{{ ocserv_key_path }}"
+  when: ocserv_use_self_signed
+
+- name: Generate self-signed certificate
+  ansible.builtin.command: >-
+    certtool --generate-self-signed
+    --load-privkey {{ ocserv_key_path }}
+    --outfile {{ ocserv_cert_path }}
+    --template /tmp/cert.cfg
+  args:
+    creates: "{{ ocserv_cert_path }}"
+  when: ocserv_use_self_signed
+  notify: Restart ocserv
+
+- name: Copy custom certificates from vault
+  ansible.builtin.copy:
+    content: "{{ item.content }}"
+    dest: "{{ item.dest }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - content: "{{ _ocserv_ssl_certificate }}"
+      dest: "{{ ocserv_cert_path }}"
+      mode: '0644'
+    - content: "{{ _ocserv_ssl_private_key }}"
+      dest: "{{ ocserv_key_path }}"
+      mode: '0600'
+    - content: "{{ _ocserv_ssl_combined }}"
+      dest: "{{ ocserv_ca_path | default('/etc/ssl/ocserv/ca.pem') }}"
+      mode: '0644'
+  when:
+    - not ocserv_use_self_signed
+    - _ocserv_certs_vault_secret is defined
+  notify: Restart ocserv
+
+- name: Debug if certificates are missing
+  ansible.builtin.debug:
+    msg: |
+      Warning: Custom certificates requested but vault data is missing!
+      Please ensure _ocserv_certs_vault_secret contains:
+      - certificate
+      - private_key
+      - combined (optional)
+  when:
+    - not ocserv_use_self_signed
+    - (_ocserv_certs_vault_secret is not defined or
+       _ocserv_certs_vault_secret.data is not defined)

@@ -1,0 +1,100 @@
+---
+- name: Get kernel version before reboot
+  ansible.builtin.command:
+    cmd: uname -r
+  register: kernel_before
+  changed_when: false
+
+- name: Display host info
+  ansible.builtin.debug:
+    msg: >-
+      Host: {{ inventory_hostname }}, Kernel: {{
+      kernel_before.stdout }}, K8s: {{
+      is_k8s_node | ternary('YES', 'NO') }}
+
+- name: Check all K8s nodes are Ready before drain
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      kubectl get nodes --no-headers | \
+      awk '{print $2}' | \
+      grep -c -E '(NotReady|Disabled)' || echo "0"
+  register: problem_nodes_count
+  changed_when: false
+  failed_when: false
+  when: is_k8s_node
+
+- name: Wait for confirmation because node is not ready
+  ansible.builtin.pause:
+    prompt: >-
+      problem_nodes_count is {{ problem_nodes_count.stdout }}
+      \n\nPress ENTER to process
+  delegate_to: localhost
+  become: false
+  when:
+    - is_k8s_node
+    - problem_nodes_count.stdout | int > 0
+
+- name: Drain K8s node
+  ansible.builtin.shell:
+    cmd: |
+      timeout 300 kubectl drain {{ inventory_hostname }} \
+        --ignore-daemonsets \
+        --delete-emptydir-data \
+        --force
+  delegate_to: "{{ groups['kube_control_plane'][0] }}"
+  when: is_k8s_node
+  changed_when: false
+
+- name: Pause for manual confirmation
+  ansible.builtin.pause:
+    minutes: 2
+    prompt: |
+      Host: {{ inventory_hostname }}
+      Kernel: {{ kernel_before.stdout }}
+      K8s Status: {{ is_k8s_node | default(false) | ternary('DRAINED', 'N/A') }}
+
+      Rebooting in 2 minute. Press Ctrl+C to abort.
+
+- name: Reboot system
+  ansible.builtin.reboot: {}
+
+- name: Wait for host
+  ansible.builtin.wait_for_connection:
+    timeout: 300
+
+- name: Wait for kubelet to start
+  ansible.builtin.wait_for:
+    port: 10250
+    host: "{{ ansible_host }}"
+    delay: 10
+    timeout: 120
+  when: is_k8s_node
+
+- name: Uncordon K8s node
+  ansible.builtin.command:
+    cmd: kubectl uncordon {{ inventory_hostname }}
+  delegate_to: "{{ groups['kube_control_plane'][0] }}"
+  when: is_k8s_node
+  changed_when: false
+
+- name: Wait for node to become Ready after uncordon
+  ansible.builtin.shell:
+    cmd: |
+      timeout 60 kubectl wait \
+        --for=condition=Ready node/{{ inventory_hostname }} --timeout=60s
+  delegate_to: "{{ groups['kube_control_plane'][0] }}"
+  when: is_k8s_node
+  changed_when: false
+
+- name: Get kernel version after reboot
+  ansible.builtin.command:
+    cmd: uname -r
+  register: kernel_after
+  changed_when: false
+
+- name: Show results
+  ansible.builtin.debug:
+    msg: >-
+      {{ inventory_hostname }}: {{
+      kernel_before.stdout }} -> {{ kernel_after.stdout }}

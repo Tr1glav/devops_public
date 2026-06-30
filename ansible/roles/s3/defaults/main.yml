@@ -1,0 +1,8 @@
+---
+s3_endpoint: "https://s3.cloud.ru"
+s3_bucket: "nextcloud"
+s3_region: "ru-central-1"
+s3_mount_point: "/mnt/s3-storage"
+
+s3_vault_mount: "infra"
+s3_vault_path: "{{ env }}/s3_secrets"

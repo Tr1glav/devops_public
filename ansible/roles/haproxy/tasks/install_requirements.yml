@@ -1,0 +1,15 @@
+---
+- name: Install HAProxy package
+  ansible.builtin.apt:
+    name: haproxy
+    state: present
+
+- name: Install iproute2 (for ip command)
+  ansible.builtin.apt:
+    name: iproute2
+    state: present
+
+- name: Install Keepalived
+  ansible.builtin.package:
+    name: keepalived
+    state: present

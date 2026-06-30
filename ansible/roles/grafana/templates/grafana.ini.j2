@@ -1,0 +1,13 @@
+[paths]
+data = {{ grafana_dir }}/data
+logs = {{ grafana_dir }}/logs
+plugins = {{ grafana_dir }}/plugins
+provisioning = {{ grafana_config_dir }}/provisioning
+
+[server]
+http_port = {{ grafana_port }}
+domain = {{ grafana_domain | default(ansible_fqdn) }}
+root_url = %(protocol)s://%(domain)s:%(http_port)s/
+
+[database]
+type = sqlite3

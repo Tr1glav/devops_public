@@ -1,0 +1,5 @@
+---
+resolved_conf_fallback_dns:
+  - "<hidden-ip>"
+  - "<hidden-ip>"
+resolved_conf_dns: "{{ groups['dnsmasq'] }}"

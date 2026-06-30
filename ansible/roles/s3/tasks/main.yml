@@ -1,0 +1,12 @@
+---
+- name: Get secrets
+  ansible.builtin.import_tasks: get_secrets.yml
+
+- name: Requirements
+  ansible.builtin.import_tasks: requirements.yml
+
+- name: Create dirs
+  ansible.builtin.import_tasks: create_dirs.yml
+
+- name: Configure goofys
+  ansible.builtin.import_tasks: configure_goofys.yml

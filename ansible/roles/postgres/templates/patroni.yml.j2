@@ -1,0 +1,80 @@
+scope: {{ patroni_cluster_name }}
+namespace: /service/
+name: {{ inventory_hostname }}
+
+restapi:
+  listen: {{ ansible_default_ipv4.address | default('0.0.0.0') }}:{{ patroni_restapi_port }}
+
+  connect_address: {{ ansible_default_ipv4.address | default(ansible_all_ipv4_addresses[0]) }}:{{ patroni_restapi_port }}
+
+  auth: {{ patroni_restapi_username | default('admin') }}:{{ patroni_restapi_password }}
+
+etcd:
+  hosts: {% for host in groups['etcd-standalone'] | default(groups['etcd'])  %}
+
+    - {{ hostvars[host].ansible_default_ipv4.address | default(hostvars[host].ansible_host) }}:2379{% endfor  %}
+    
+  protocol: http
+
+{% if inventory_hostname == groups['postgres'][0]  %}
+bootstrap:
+  # DCS настройки ДОЛЖНЫ быть внутри bootstrap для новых версий Patroni
+  dcs:
+    ttl: 30
+    loop_wait: 10
+    retry_timeout: 10
+    maximum_lag_on_failover: 1048576
+    postgresql:
+      use_pg_rewind: true
+      use_slots: true
+      parameters:
+        max_connections: 100
+        shared_buffers: 128MB
+        wal_level: replica
+        max_wal_senders: 10
+        max_replication_slots: 10
+        hot_standby: on
+
+  # Опции для отладки
+  force: true
+  
+  method: initdb
+  initdb:
+  - encoding: UTF8
+  - data-checksums
+
+  pg_hba:
+  - host replication {{ replication_username | default('replicator') }} 0.0.0.0/0 md5
+  - host all all 0.0.0.0/0 md5
+  - hostssl all all 0.0.0.0/0 md5
+
+  users:
+    {{ patroni_restapi_username | default('admin') }}:
+      password: {{ patroni_restapi_password }}
+      options:
+        - createrole
+        - createdb
+        - login
+    {{ replication_username | default('replicator') }}:
+      password: {{ replication_password }}
+      options:
+        - replication
+        - login
+{% endif  %}
+
+postgresql:
+  listen: {{ ansible_default_ipv4.address | default('0.0.0.0') }}:5432
+  connect_address: {{ ansible_default_ipv4.address | default(ansible_all_ipv4_addresses[0]) }}:5432
+  data_dir: /var/lib/postgresql/{{ postgres_version }}/main
+  bin_dir: /usr/lib/postgresql/{{ postgres_version }}/bin
+  
+  authentication:
+    replication:
+      username: {{ replication_username | default('replicator') }}
+      password: {{ replication_password }}
+    superuser:
+      username: postgres
+      password: {{ postgres_superuser_password }}
+  
+  parameters:
+    unix_socket_directories: '/var/run/postgresql'

@@ -1,0 +1,45 @@
+---
+- name: Get leader status
+  ansible.builtin.uri:
+    url: "http://{{ ansible_host }}:8008/leader"
+    return_content: true
+    validate_certs: false
+    status_code: [200, 503]
+  register: postgres_leader_check
+  retries: 3
+  delay: 5
+  failed_when: false
+
+- name: Set node leader status
+  ansible.builtin.set_fact:
+    postgres_is_master: "{{ postgres_leader_check.status == 200 }}"
+    postgres_no_leader: "{{ postgres_leader_check.status != 200 }}"
+
+- name: Collect cluster leadership status
+  ansible.builtin.set_fact:
+    postgres_cluster_has_leader: >-
+      {{
+        (groups['postgres']
+        | map('extract', hostvars, 'postgres_is_master')
+        | select('equalto', true)
+        | list | length > 0)
+        | default(false)
+      }}
+    postgres_global_no_leader: >-
+      {{
+        not (
+          (groups['postgres']
+          | map('extract', hostvars, 'postgres_is_master')
+          | select('equalto', true)
+          | list | length > 0)
+          | default(false)
+        )
+      }}
+  run_once: true
+  delegate_to: localhost
+  become: false
+
+- name: Print leader status
+  ansible.builtin.debug:
+    msg: "Node is {% if postgres_is_master %}leader{% else %}replica{% endif %}"
+  when: postgres_is_master is defined

@@ -1,0 +1,14 @@
+temporal:
+  host: localhost:7233
+  namespace: default
+  task_queue: default-task-queue
+
+worker:
+  max_concurrent_workflow_tasks: 100
+  max_concurrent_activity_tasks: 100
+  max_concurrent_local_activity_tasks: 100
+  heartbeat_timeout: 60s
+
+logging:
+  level: INFO
+  file: {{ worker_log_dir }}/worker.log

@@ -1,0 +1,11 @@
+---
+profile: production
+skip_list:
+  - role-name[path]
+  - yaml[line-length]
+  - fqcn[action-core]
+  - name[template]
+  - var-naming[no-role-prefix]
+warn_list:
+  - experimental
+  - jinja[spacing]

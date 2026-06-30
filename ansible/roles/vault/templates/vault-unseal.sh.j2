@@ -1,0 +1,46 @@
+#!/bin/bash
+
+# Ожидаем доступности Vault
+export VAULT_ADDR="http://127.0.0.1:8200"
+
+MAX_RETRIES=30
+RETRY_DELAY=5
+
+# Function to check seal status
+check_seal_status() {
+    vault status -format=json 2>/dev/null | jq -r '.sealed' 2>/dev/null
+}
+
+# Wait for Vault to be available
+for ((i=1; i<=MAX_RETRIES; i++)); do
+    STATUS=$(check_seal_status)
+    if [ "$STATUS" == "true" ] || [ "$STATUS" == "false" ]; then
+        break
+    fi
+    echo "$(date) - Waiting for Vault to be available... (attempt $i/$MAX_RETRIES)"
+    sleep $RETRY_DELAY
+done
+
+# Perform unseal if needed
+STATUS=$(check_seal_status)
+case "$STATUS" in
+    "true")
+        echo "$(date) - Vault is sealed, performing unseal"
+        {% for key in vault_unseal_keys[0:vault_keythreshold]  %}
+        if ! vault operator unseal "{{ key }}" >/dev/null; then
+            echo "$(date) - Failed to unseal with key {{ loop.index }}"
+            exit 1
+        fi
+        {% endfor  %}
+        echo "$(date) - Unseal completed successfully"
+        ;;
+    "false")
+        echo "$(date) - Vault is already unsealed"
+        ;;
+    *)
+        echo "$(date) - Error: Unable to determine Vault status"
+        exit 1
+        ;;
+esac
+
+exit 0

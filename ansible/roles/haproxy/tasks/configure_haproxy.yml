@@ -1,0 +1,37 @@
+---
+- name: Create HAProxy configuration
+  ansible.builtin.template:
+    src: haproxy.cfg.j2
+    dest: "{{ haproxy_config }}"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Validate HAProxy config
+  ansible.builtin.command: haproxy -c -f "{{ haproxy_config }}"
+  register: _haproxy_validate
+  changed_when: false
+
+- name: Fail if HAProxy config is invalid
+  ansible.builtin.fail:
+    msg: "Invalid HAProxy config! Check {{ haproxy_config }}"
+  when: _haproxy_validate.rc != 0
+
+- name: Enable and start HAProxy
+  ansible.builtin.service:
+    name: haproxy
+    state: started
+    enabled: true
+
+- name: Reload haproxy
+  ansible.builtin.service:
+    name: haproxy
+    state: reloaded
+
+- name: Wait for HAProxy to become available
+  ansible.builtin.wait_for:
+    port: 443
+    host: "{{ ansible_default_ipv4.address }}"
+    timeout: 30
+  become: false
+  delegate_to: localhost

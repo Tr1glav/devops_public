@@ -1,0 +1,35 @@
+---
+vault_k8s_release_name: "vault"
+vault_k8s_namespace: "vault"
+vault_k8s_helm_version: "0.32.0"
+vault_k8s_vault_version: "1.21.2"
+
+vault_k8s_mode: "standalone"
+vault_k8s_storage_backend: "raft"
+
+vault_k8s_storage_size: "10Gi"
+vault_k8s_storage_class: ""
+
+vault_k8s_ha_replicas: 3
+
+vault_k8s_service_type: "ClusterIP"
+
+vault_k8s_unseal_method: "shamir"
+
+vault_k8s_ui_enabled: true
+vault_k8s_injector_enabled: false
+
+vault_k8s_tls_disable: true
+
+vault_k8s_resources:
+  server:
+    requests:
+      memory: "256Mi"
+      cpu: "250m"
+    limits:
+      memory: "512Mi"
+      cpu: "500m"
+
+vault_k8s_audit_enabled: false
+
+vault_k8s_extra_values: {}

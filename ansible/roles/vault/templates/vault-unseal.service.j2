@@ -1,0 +1,19 @@
+[Unit]
+Description=Vault Unseal Service
+After=vault.service
+Requires=vault.service
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+User={{ vault_user }}
+Group={{ vault_group }}
+ExecStartPre=/bin/sleep 10
+ExecStart=/etc/vault/scripts/vault-unseal.sh
+Restart=on-failure
+RestartSec=5
+TimeoutStartSec=300
+
+[Install]
+WantedBy=multi-user.target

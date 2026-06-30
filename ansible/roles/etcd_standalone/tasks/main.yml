@@ -1,0 +1,15 @@
+---
+- name: Etcd users
+  ansible.builtin.import_tasks: etcd_users.yml
+
+- name: Install etcd
+  ansible.builtin.import_tasks: install_etcd.yml
+
+- name: Check etcd
+  ansible.builtin.import_tasks: check_etcd.yml
+
+- name: Configure etcd
+  ansible.builtin.import_tasks: check_etcd.yml
+
+- name: Check etcd cluster
+  ansible.builtin.import_tasks: check_cluster.yml

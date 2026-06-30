@@ -1,0 +1,73 @@
+---
+- name: Get secrets
+  ansible.builtin.import_tasks: get_secrets.yml
+  tags:
+    - openconnect_client_users
+
+- name: Install OpenConnect packages
+  ansible.builtin.apt:
+    name: "{{ openconnect_client_packages }}"
+    state: present
+    update_cache: true
+
+- name: Create openconnect configuration directory
+  ansible.builtin.file:
+    path: /etc/openconnect
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Ensure old VPN interface is cleaned
+  ansible.builtin.command:
+    cmd: "ip link delete {{ openconnect_client_interface }}"
+  failed_when: false
+  changed_when: false
+
+- name: Kill any existing openconnect processes
+  ansible.builtin.command:
+    cmd: "pkill -9 openconnect || true"
+  changed_when: false
+
+- name: Remove stale PID files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/run/openconnect.{{ openconnect_client_interface }}.pid"
+    - "/var/run/openconnect.pid"
+  failed_when: false
+
+- name: Create credentials file
+  ansible.builtin.copy:
+    content: |
+      VPN_PASSWORD={{ openconnect_client_password }}
+    dest: /etc/openconnect/credentials.conf
+    mode: '0600'
+    owner: root
+    group: root
+  when: >-
+    openconnect_client_password is defined and
+    openconnect_client_password != ""
+  no_log: true
+
+- name: Create connection script
+  ansible.builtin.template:
+    src: openconnect.conf.j2
+    dest: /etc/openconnect/{{ openconnect_client_interface }}.conf
+    mode: '0755'
+  notify: restart openconnect
+
+- name: Deploy systemd service template
+  ansible.builtin.template:
+    src: openconnect.service.j2
+    dest: /etc/systemd/system/openconnect@.service
+    mode: '0644'
+  notify: reload systemd
+
+- name: Ensure openconnect service is enabled and started
+  ansible.builtin.systemd:
+    name: "openconnect@{{ openconnect_client_interface }}"
+    enabled: "{{ openconnect_client_service_enabled | default(true) }}"
+    state: "{{ openconnect_client_service_state | default('started') }}"
+    daemon_reload: true

@@ -1,0 +1,46 @@
+---
+redmine_version: "6.0.3"
+redmine_install_dir: "/var/lib/redmine"
+redmine_user: "www-data"
+redmine_domain: "redmine.{{ domain }}"
+
+redmine_db_adapter: "postgresql"
+redmine_db_name: "redmine"
+redmine_db_user: "redmine"
+redmine_db_host: "localhost"
+redmine_db_port: 5432
+redmine_db_password: ""
+
+redmine_secret_key_base: ""
+redmine_secret_key_len: 128
+
+redmine_vault_mount: "infra"
+redmine_vault_path: "{{ env }}/redmine"
+
+redmine_enable_ssl: true
+redmine_certs_vault_mount: "certs"
+redmine_certs_vault_path: "{{ env }}/{{ redmine_domain }}"
+
+redmine_listen_port: 8080
+
+redmine_ruby_version: "3.3.0"
+
+redmine_email_smtp_delivery_method: "smtp"
+redmine_email_smtp_host: "{{ smtp_host | default('localhost') }}"
+redmine_email_smtp_port: 587
+redmine_email_smtp_user: ""
+redmine_email_smtp_password: ""
+redmine_email_smtp_tls: true
+redmine_email_from: "redmine@{{ redmine_domain }}"
+
+redmine_max_attach_size: 10485760
+redmine_attachments_storage_path: "{{ redmine_install_dir }}/files"
+
+redmine_session_store: "active_record"
+redmine_session_key: "_redmine_session"
+
+redmine_autologin_cookie_key: "autologin"
+redmine_autologin_cookie_path: "/"
+
+redmine_default_language: "ru"
+redmine_default_theme: "purple"

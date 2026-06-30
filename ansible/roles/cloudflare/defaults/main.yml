@@ -1,0 +1,3 @@
+---
+cloudflare_vault_secret_path: "external/data/dns/cloudflare"
+cloudflare_vault_validate_certs: true

@@ -1,0 +1,77 @@
+log:
+  stdout: true
+  level: info
+  format: json
+
+persistence:
+  defaultStore: postgres-default
+  visibilityStore: postgres-visibility
+  numHistoryShards: {{ num_history_shards }}
+  datastores:
+    postgres-default:
+      sql:
+        pluginName: "postgres12"  # Для некоторых версий может быть "postgresql"
+        databaseName: "{{ db_name_default }}"
+        connectAddr: "{{ db_host }}:{{ db_port }}"
+        connectProtocol: "tcp"
+        user: "{{ db_user }}"
+        password: "{{ db_password }}"
+        maxConns: 20
+        maxIdleConns: 20
+        maxConnLifetime: "1h"
+        connectAttributes:
+          application_name: "temporal-server"
+    postgres-visibility:
+      sql:
+        pluginName: "postgres12"
+        databaseName: "{{ db_name_visibility }}"
+        connectAddr: "{{ db_host }}:{{ db_port }}"
+        connectProtocol: "tcp"
+        user: "{{ db_user }}"
+        password: "{{ db_password }}"
+        maxConns: 10
+        maxIdleConns: 10
+        maxConnLifetime: "1h"
+        connectAttributes:
+          application_name: "temporal-visibility"
+
+global:
+  membership:
+    maxJoinDuration: 30s
+    broadcastAddress: "{{ broadcast_address }}"
+  pprof:
+    port: 7936
+
+services:
+  frontend:
+    rpc:
+      grpcPort: 7233
+      membershipPort: 6933
+      bindOnLocalHost: false
+  matching:
+    rpc:
+      grpcPort: 7235
+      membershipPort: 6935
+      bindOnLocalHost: false
+  history:
+    rpc:
+      grpcPort: 7234
+      membershipPort: 6934
+      bindOnLocalHost: false
+  worker:
+    rpc:
+      membershipPort: 6939
+
+clusterMetadata:
+  enableGlobalNamespace: false
+  failoverVersionIncrement: 10
+  masterClusterName: "active"
+  currentClusterName: "active"
+  clusterInformation:
+    active:
+      enabled: true
+      initialFailoverVersion: 1
+      rpcAddress: "{{ broadcast_address }}:7233"
+
+dcRedirectionPolicy:
+  policy: "noop"

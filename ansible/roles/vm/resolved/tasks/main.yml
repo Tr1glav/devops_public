@@ -1,0 +1,24 @@
+---
+- name: Resolved | Ensure systemd-resolved is enabled and running
+  ansible.builtin.systemd:
+    name: systemd-resolved
+    state: started
+    enabled: true
+  tags: resolved
+
+- name: Resolved | Configure systemd-resolved to use dnsmasq server
+  ansible.builtin.template:
+    src: resolved.conf.j2
+    dest: /etc/systemd/resolved.conf
+    mode: "0644"
+  notify: restart systemd-resolved
+  diff: true
+  tags: resolved
+
+- name: Resolved | Ensure /etc/resolv.conf is symlinked to systemd-resolved stub
+  ansible.builtin.file:
+    src: /run/systemd/resolve/stub-resolv.conf
+    dest: /etc/resolv.conf
+    state: link
+    force: true
+  tags: resolved

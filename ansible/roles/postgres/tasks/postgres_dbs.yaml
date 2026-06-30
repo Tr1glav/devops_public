@@ -1,0 +1,89 @@
+---
+- name: Read all databases from Vault
+  community.hashi_vault.vault_list:
+    url: "{{ vault_addr }}"
+    token: "{{ vault_token }}"
+    path: "{{ vault_mount }}/metadata/{{ vault_dbs_path }}"
+  register: postgres_vault_dbs_response
+  delegate_to: localhost
+  become: false
+  when: postgres_is_master
+
+- name: Read all users from Vault
+  community.hashi_vault.vault_read:
+    url: "{{ vault_addr }}"
+    token: "{{ vault_token }}"
+    path: "{{ vault_mount }}/data/{{ vault_users_path }}"
+  register: postgres_vault_users_response
+  when: postgres_is_master
+
+- name: Retrieve secrets from Vault
+  become: false
+  ansible.builtin.uri:
+    url: "{{ vault_addr }}/v1/{{ vault_mount }}/data/{{ vault_path }}/patroni"
+    method: GET
+    headers:
+      X-Vault-Token: "{{ vault_token }}"
+    return_content: true
+    validate_certs: false
+  register: postgres_vault_dbs_secret
+  no_log: true
+  failed_when: postgres_vault_dbs_secret.status != 200
+  delegate_to: localhost
+
+- name: Create DBs
+  ansible.builtin.include_tasks: create_db.yaml
+  loop: "{{ postgres_vault_dbs_response.data.data['keys'] }}"
+  when: postgres_is_master
+
+- name: Get list of PostgreSQL databases
+  community.postgresql.postgresql_query:
+    query: >-
+      SELECT datname FROM pg_database
+      WHERE datistemplate = false and datname != 'postgres';
+    login_user: postgres
+    login_password: >-
+      {{ (postgres_vault_secrets.json.data.data.superuser_password)
+      | default('') }}
+    login_unix_socket: "/var/run/postgresql/"
+  when: postgres_is_master
+  register: postgres_pg_databases
+
+- name: Remove databases
+  ansible.builtin.include_tasks: tasks/drop_db.yaml
+  loop: >-
+    {{
+      (postgres_pg_databases.query_result | map(attribute='datname') | list
+      | difference(postgres_vault_dbs_response.data.data['keys']))
+      | reject('eq', 'postgres') | list
+    }}
+  when: postgres_is_master
+
+- name: Get list of all PostgreSQL users
+  community.postgresql.postgresql_query:
+    db: postgres
+    query: "SELECT usename FROM pg_user WHERE usename not in {{ system_users }}"
+  register: postgres_pg_users
+  when: postgres_is_master
+
+- name: Create Users
+  ansible.builtin.include_tasks: tasks/create_user.yaml
+  loop: "{{ postgres_vault_users_response.data.data.data | dict2items }}"
+  no_log: true
+  when: postgres_is_master
+  loop_control:
+    loop_var: user_info
+
+- name: Remove users existing in PG but missing in Vault
+  ansible.builtin.include_tasks: tasks/drop_users.yaml
+  loop: >-
+    {{
+      (postgres_pg_users.query_result | map(attribute='usename') | list)
+      | difference(
+          (postgres_vault_dbs_response.data.data.get('keys', [])
+          + postgres_vault_users_response.data.data.data.keys() | list)
+        )
+      | reject('in', ['postgres', 'pg_signal_backend', 'pg_read_all_settings'])
+      | list
+    }}
+  when: postgres_is_master

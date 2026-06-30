@@ -1,0 +1,10 @@
+---
+collections:
+  - name: community.general
+  - name: community.hashi_vault
+  - name: community.kubernetes
+  - name: kubernetes.core
+  - name: community.postgresql
+  - name: ansible.posix
+  - name: community.mysql
+  - name: ansible.mysql

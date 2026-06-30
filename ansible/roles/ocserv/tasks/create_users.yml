@@ -1,0 +1,98 @@
+---
+- name: Generate ocpasswd file from Vault users
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      temp_file=$(mktemp)
+
+      # Создаем новый файл
+      {% for user in _vpn_users_list %}
+      echo '{{ user.password }}' | ocpasswd -c \
+        "$temp_file" '{{ user.username }}' 2>/dev/null
+      {% endfor %}
+
+      # Сравниваем с существующим
+      if [ -f /etc/ocserv/ocpasswd ] && \
+        diff -q "$temp_file" /etc/ocserv/ocpasswd >/dev/null 2>&1; then
+        rm -f "$temp_file"
+        echo "UNCHANGED"
+      else
+        mv "$temp_file" /etc/ocserv/ocpasswd
+        chmod 600 /etc/ocserv/ocpasswd
+        echo "CHANGED"
+      fi
+    executable: /bin/bash
+  when:
+    - ocserv_auth_method is search('plain')
+    - _vpn_users_list is defined
+    - _vpn_users_list | length > 0
+  notify: Restart ocserv
+  register: ocserv_result
+  changed_when: ocserv_result.stdout == "CHANGED"
+
+- name: Remove per-user configs directory
+  ansible.builtin.file:
+    path: "/etc/ocserv/config-per-user"
+    state: absent
+
+- name: Recreate per-user configs directory
+  ansible.builtin.file:
+    path: "/etc/ocserv/config-per-user"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Generate per-user configuration files from Vault
+  ansible.builtin.copy:
+    content: |
+      # Managed by Ansible - DO NOT EDIT MANUALLY
+      # User: {{ item.username }}
+      {% if item.iroutes is defined and item.iroutes %}
+      {% if item.iroutes is string %}
+      {% set iroute_list = item.iroutes.split(',') %}
+      {% else %}
+      {% set iroute_list = item.iroutes %}
+      {% endif %}
+      {% for iroute in iroute_list %}
+      iroute = {{ iroute.strip() }}
+      exclude-route = {{ iroute.strip() }}
+      no-route = {{ iroute.strip() }}
+      {% endfor %}
+      {% endif %}
+      {% if item.routes is defined and item.routes %}
+      # Custom routes for this user
+      {% if item.routes is string %}
+      {% set route_list = item.routes.split(',') %}
+      {% else %}
+      {% set route_list = item.routes %}
+      {% endif %}
+      {% for route in route_list %}
+      route = {{ route.strip() }}
+      {% endfor %}
+      {% endif %}
+    dest: "/etc/ocserv/config-per-user/{{ item.username }}"
+    mode: '0644'
+    owner: root
+    group: root
+  loop: "{{ _vpn_users_list }}"
+  when:
+    - ocserv_auth_method is search('plain')
+    - _vpn_users_list is defined
+    - _vpn_users_list | length > 0
+    - item.routes is defined or item.iroutes is defined
+  notify: Restart ocserv
+  register: ocserv_per_user_configs
+  no_log: true
+
+- name: Remove ocpasswd file if no users
+  ansible.builtin.file:
+    path: /etc/ocserv/ocpasswd
+    state: absent
+  when:
+    - ocserv_auth_method is search('plain')
+    - _vpn_users_list is defined
+    - _vpn_users_list | length == 0
+  notify: Restart ocserv
+  register: ocserv_result
+  changed_when: true

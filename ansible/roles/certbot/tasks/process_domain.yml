@@ -1,0 +1,28 @@
+---
+- name: Check for existing certificate for {{ current_domain }}
+  ansible.builtin.stat:
+    path: /etc/letsencrypt/live/{{ current_domain }}/cert.pem
+  register: __certbot_cert_exists
+
+- name: Run Certbot for {{ current_domain }}
+  ansible.builtin.command: |
+    certbot certonly \
+      -v \
+      --dns-cloudflare \
+      --dns-cloudflare-credentials /etc/letsencrypt/cloudflare/cloudflare.ini \
+      --non-interactive \
+      --agree-tos \
+      --email {{ _certbot_vault_cf_secrets.json.data.data.admin_email }} \
+      {% if __certbot_cert_exists.stat.exists and
+        certbot_expand_existing %}--expand{% endif %} \
+      -d {{ current_domain }}
+  register: __certbot_run
+  changed_when: "'No new certs' not in __certbot_run.stdout"
+
+- name: Combine certificate files for {{ current_domain }}
+  ansible.builtin.shell:
+    cmd: >-
+      cat /etc/letsencrypt/live/{{ current_domain }}/fullchain.pem
+      /etc/letsencrypt/live/{{ current_domain }}/privkey.pem
+      > /etc/letsencrypt/live/{{ current_domain }}/combined.pem
+  changed_when: false

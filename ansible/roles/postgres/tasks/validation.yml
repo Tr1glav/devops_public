@@ -1,0 +1,104 @@
+---
+- name: Validate required variables
+  ansible.builtin.assert:
+    that:
+      - postgres_version is defined
+      - patroni_version is defined
+      - vault_addr is defined
+      - vault_token is defined
+      - vault_mount is defined
+      - vault_path is defined
+      - groups['etcd-standalone'] is defined or groups['etcd'] is defined
+    msg: "One or more required variables are missing"
+  run_once: true
+
+- name: Get etcd host
+  ansible.builtin.set_fact:
+    postgres_etcd_host: >-
+      {{
+        hostvars[
+          groups['etcd-standalone'][0] | default(groups['etcd'][0])
+        ].ansible_host
+        | default(
+          hostvars[
+            groups['etcd-standalone'][0] | default(groups['etcd'][0])
+          ].inventory_hostname
+        )
+      }}
+  run_once: true
+
+- name: Check etcd cluster availability
+  ansible.builtin.wait_for:
+    host: "{{ postgres_etcd_host }}"
+    port: 2379
+    timeout: 30
+  run_once: true
+
+- name: Install psycopg2 dependencies
+  ansible.builtin.apt:
+    name:
+      - python3-psycopg2
+      - libpq-dev
+    state: present
+
+- name: Ensure Python3 and venv are installed
+  ansible.builtin.apt:
+    name:
+      - python3
+      - python3-venv
+      - python3-pip
+      - libpq-dev
+      - build-essential
+    state: present
+    update_cache: true
+  when: ansible_os_family == 'Debian'
+
+- name: Ensure keyring directory exists
+  ansible.builtin.file:
+    path: "/etc/apt/keyrings"
+    state: directory
+    mode: '0755'
+  when: ansible_os_family == 'Debian'
+
+- name: Create system groups
+  ansible.builtin.group:
+    name: "{{ item.name }}"
+    state: present
+    system: true
+  loop:
+    - {name: "postgres"}
+    - {name: "{{ patroni_group }}"}
+    - {name: "{{ pgbouncer_group }}"}
+  tags: [users]
+
+- name: Create system users
+  ansible.builtin.user:
+    name: "{{ item.name }}"
+    group: "{{ item.group }}"
+    system: true
+    shell: /bin/bash
+    home: "{{ item.home }}"
+    create_home: true
+    state: present
+  loop:
+    - >-
+      {name: "{{ patroni_user }}", group: "{{ patroni_group }}",
+      home: "{{ patroni_home }}"}
+    - >-
+      {name: "{{ pgbouncer_user }}", group: "{{ pgbouncer_group }}",
+      home: "/var/lib/{{ pgbouncer_user }}"}
+  tags: [users]
+
+- name: Check for existing data directory
+  ansible.builtin.stat:
+    path: "/var/lib/postgresql/{{ postgres_version }}/main"
+  register: postgres_pg_data_dir_exists
+  changed_when: false
+  tags: [postgresql, data]
+
+- name: Check for existing PostgreSQL cluster
+  ansible.builtin.stat:
+    path: "/var/lib/postgresql/{{ postgres_version }}/main/PG_VERSION"
+  register: postgres_pg_cluster_exists
+  changed_when: false
+  tags: [postgresql, data]

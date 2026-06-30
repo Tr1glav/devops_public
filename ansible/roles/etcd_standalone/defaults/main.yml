@@ -1,0 +1,13 @@
+---
+etcd_version: "3.5.9"
+etcd_cluster_name: "etcd-cluster"
+etcd_client_port: 2379
+etcd_peer_port: 2380
+
+# etcd_url: >-
+#   https://github.com/etcd-io/etcd/releases/download/v{{
+#   etcd_version }}/etcd-v{{ etcd_version }}-linux-amd64.tar.gz
+etcd_url: >-
+  https://github-cache.{{ product_env }}.{{ domain }}
+  /github/etcd-io/etcd/releases/download/v{{ etcd_version
+  }}/etcd-v{{ etcd_version }}-linux-amd64.tar.gz

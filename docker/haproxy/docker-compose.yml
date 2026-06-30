@@ -1,0 +1,19 @@
+---
+version: "3.0"
+services:
+  haproxy:
+    image: haproxy:2.3.2-alpine
+    command: >
+      sh -c "apk add --no-cache curl && mkdir /var/lib/haproxy
+      && haproxy -f /usr/local/etc/haproxy/haproxy.cfg"
+    volumes:
+      - "./haproxy.cfg:/usr/local/etc/haproxy/haproxy.cfg"
+    ports:
+      - target: 443
+        published: 443
+        protocol: tcp
+        mode: host
+      - target: 80
+        published: 80
+        protocol: tcp
+        mode: host

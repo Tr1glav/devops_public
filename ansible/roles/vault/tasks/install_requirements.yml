@@ -1,0 +1,6 @@
+---
+- name: Install dependencies
+  ansible.builtin.package:
+    name: ["curl", "unzip", "jq", "gpg"]
+    state: present
+    update_cache: true

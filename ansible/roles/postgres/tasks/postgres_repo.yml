@@ -1,0 +1,42 @@
+---
+- name: Remove old repository files
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /etc/apt/sources.list.d/postgresql.list
+    - /etc/apt/trusted.gpg.d/postgresql.gpg
+    - /etc/apt/keyrings/postgresql.asc
+
+- name: Download PostgreSQL GPG key
+  ansible.builtin.get_url:
+    url: "https://apt.postgresql.org/pub/repos/apt/ACCC4CF8.asc"
+    dest: "/etc/apt/keyrings/postgresql.asc"
+    mode: '0644'
+  when: ansible_os_family == 'Debian'
+
+- name: Convert key to gpg format
+  ansible.builtin.command: >-
+    gpg --dearmor -o /etc/apt/keyrings/postgresql.gpg
+    /etc/apt/keyrings/postgresql.asc
+  args:
+    creates: /etc/apt/keyrings/postgresql.gpg
+  when: ansible_os_family == 'Debian'
+  changed_when: false
+
+- name: Add PostgreSQL repository
+  ansible.builtin.apt_repository:
+    repo: >-
+      deb [arch=amd64 signed-by=/etc/apt/keyrings/postgresql.gpg]
+      https://apt.postgresql.org/pub/repos/apt
+      {{ ansible_distribution_release }}-pgdg main
+    state: present
+    filename: postgresql
+    update_cache: false
+  when: ansible_os_family == 'Debian'
+
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+  when: ansible_os_family == 'Debian'

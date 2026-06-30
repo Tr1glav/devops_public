@@ -1,0 +1,26 @@
+---
+- name: Stop and disable postgresql
+  ansible.builtin.systemd:
+    name: "postgresql@{{ postgres_version }}-main"
+    state: stopped
+    enabled: false
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart patroni
+  ansible.builtin.systemd:
+    name: patroni
+    state: restarted
+
+- name: Reload systemd and restart patroni
+  ansible.builtin.systemd:
+    name: patroni
+    state: restarted
+    daemon_reload: true
+
+- name: Restart pgbouncer
+  ansible.builtin.systemd:
+    name: pgbouncer
+    state: restarted

@@ -1,0 +1,33 @@
+---
+# metallb-config.yaml
+apiVersion: metallb.io/v1beta1
+kind: IPAddressPool
+metadata:
+  name: default-pool
+  namespace: metallb-system
+spec:
+  addresses:
+    - <hidden-ip>-<hidden-ip>
+
+---
+apiVersion: metallb.io/v1beta1
+kind: L2Advertisement
+metadata:
+  name: l2-advertisement
+  namespace: metallb-system
+spec:
+  ipAddressPools:
+    - default-pool
+---
+# calico-external-ippool.yaml
+apiVersion: crd.projectcalico.org/v1
+kind: IPPool
+metadata:
+  name: external-ippool
+spec:
+  cidr: <hidden-ip>/16
+  blockSize: 29
+  nodeSelector: "all()"
+  vxlanMode: Never
+  ipipMode: Never
+  natOutgoing: true  # Важно: включить NAT для исходящего трафика

@@ -1,0 +1,7 @@
+---
+- name: Install cache servers
+  hosts: cache-server
+  become: false
+  gather_facts: true
+  roles:
+    - role: cache_server

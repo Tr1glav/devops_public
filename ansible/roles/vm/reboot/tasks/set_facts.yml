@@ -1,0 +1,14 @@
+---
+- name: Check reboot required file
+  ansible.builtin.stat:
+    path: "{{ reboot_required_file }}"
+  register: reboot_flag
+
+- name: Check if Kubernetes node by checking kubelet
+  ansible.builtin.stat:
+    path: /var/lib/kubelet
+  register: kubelet_check
+
+- name: Set k8s node fact
+  ansible.builtin.set_fact:
+    is_k8s_node: "{{ kubelet_check.stat.exists }}"

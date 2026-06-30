@@ -1,0 +1,121 @@
+---
+- name: Get secrets
+  ansible.builtin.import_tasks: get_secrets.yml
+
+
+- name: install system dependencies
+  apt:
+    name:
+      - python3
+      - python3-pip
+      - python3-venv
+      - python3-dev
+      - git
+      - curl
+    state: present
+    update_cache: true
+
+- name: Create meshcore group
+  ansible.builtin.group:
+    name: "{{ meshcore_group }}"
+    system: true
+    state: present
+
+- name: create meshcore user
+  user:
+    name: "{{ meshcore_user }}"
+    group: "{{ meshcore_group }}"
+    system: true
+    create_home: true
+    home: "{{ meshcore_home }}"
+    shell: /bin/bash
+
+- name: create meshcore directories
+  file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ meshcore_user }}"
+    group: "{{ meshcore_group }}"
+    mode: "0755"
+  loop:
+    - "{{ meshcore_home }}"
+    - "{{ meshcore_home }}/logs"
+    - "{{ meshcore_home }}/config"
+
+- name: deploy logrotate config
+  template:
+    src: meshcore.logrotate.j2
+    dest: /etc/logrotate.d/meshcore_bot
+    owner: root
+    group: root
+    mode: "0644"
+
+- name: create log file
+  file:
+    path: /var/log/meshcore_bot.log
+    state: touch
+    owner: "{{ meshcore_user }}"
+    group: "{{ meshcore_group }}"
+    mode: "0644"
+
+- name: copy bot.py
+  copy:
+    src: bot.py
+    dest: "{{ meshcore_home }}/bot.py"
+    owner: "{{ meshcore_user }}"
+    group: "{{ meshcore_group }}"
+    mode: "0644"
+  notify: restart meshcore
+  when: meshcore_local_script | default(true)
+
+- name: create python virtualenv
+  pip:
+    name: pip
+    state: latest
+    virtualenv: "{{ meshcore_venv_path }}"
+    virtualenv_command: /usr/bin/python3 -m venv
+  become_user: "{{ meshcore_user }}"
+  become: true
+  register: venv_created
+  notify: restart meshcore
+
+- name: install meshcore package in virtualenv
+  pip:
+    name: "{{ meshcore_python_package }}"
+    state: present
+    virtualenv: "{{ meshcore_venv_path }}"
+  become_user: "{{ meshcore_user }}"
+  become: true
+  when: venv_created is success
+  notify: restart meshcore
+
+- name: install additional python packages
+  pip:
+    name: "{{ meshcore_extra_packages | default([]) }}"
+    state: present
+    virtualenv: "{{ meshcore_venv_path }}"
+  become_user: "{{ meshcore_user }}"
+  become: true
+  when: meshcore_extra_packages is defined
+  notify: restart meshcore
+
+- name: deploy systemd unit
+  template:
+    src: meshcore.service.j2
+    dest: /etc/systemd/system/{{ meshcore_service_name }}.service
+    owner: root
+    group: root
+    mode: "0644"
+  notify: restart meshcore
+
+- name: reload systemd daemon
+  systemd:
+    daemon_reload: true
+  when: ansible_service_mgr == "systemd"
+
+- name: enable and start service
+  systemd:
+    name: "{{ meshcore_service_name }}"
+    enabled: true
+    state: started
+    daemon_reload: true

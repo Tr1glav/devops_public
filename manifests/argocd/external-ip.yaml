@@ -1,0 +1,16 @@
+---
+# argocd-lb-fixed.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: argocd-external
+  namespace: argocd
+spec:
+  type: LoadBalancer
+  ports:
+    - name: https
+      port: 443
+      targetPort: 8080
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: argocd-server

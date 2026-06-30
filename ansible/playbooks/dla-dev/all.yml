@@ -1,0 +1,24 @@
+---
+- name: Configure logrotate
+  hosts: all
+  become: true
+  roles:
+    - vm/logrotate
+
+- name: Install node_exporter
+  hosts: all
+  become: true
+  roles:
+    - role: vm/node_exporter
+
+- name: Install prometheus
+  hosts: prometheus
+  become: true
+  roles:
+    - role: prometheus
+
+- name: Install grafana
+  hosts: prometheus
+  become: true
+  roles:
+    - role: grafana

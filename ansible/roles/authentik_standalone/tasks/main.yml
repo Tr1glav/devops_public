@@ -1,0 +1,220 @@
+---
+- name: Install system dependencies
+  ansible.builtin.apt:
+    name:
+      - build-essential
+      - git
+      - curl
+      - wget
+      - libxml2-dev
+      - libxmlsec1-dev
+      - libxmlsec1-openssl
+      - pkg-config
+      - libpq-dev
+      - libffi-dev
+      - libssl-dev
+      - zlib1g-dev
+      - libjpeg-dev
+      - libpng-dev
+      - libkrb5-dev
+      - gettext
+      - redis-server
+      - postgresql
+      - postgresql-contrib
+      - nginx
+    state: present
+    update_cache: true
+
+- name: Check Python version
+  ansible.builtin.command: python3 --version
+  register: python_check
+  changed_when: false
+  failed_when: false
+
+- name: Install Python dependencies for uv
+  ansible.builtin.apt:
+    name:
+      - python3-pip
+      - python3-venv
+    state: present
+
+- name: Install uv
+  ansible.builtin.pip:
+    name: uv
+    state: present
+
+- name: Create authentik user
+  ansible.builtin.user:
+    name: "{{ authentik_user }}"
+    system: true
+    shell: /bin/bash
+    home: "{{ authentik_install_dir }}"
+    create_home: true
+
+- name: Create authentik directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ authentik_user }}"
+    group: "{{ authentik_user }}"
+    mode: '0755'
+  loop:
+    - "{{ authentik_install_dir }}"
+    - "{{ authentik_install_dir }}/bin"
+    - "{{ authentik_install_dir }}/lib"
+    - "{{ authentik_install_dir }}/data"
+
+- name: Clone authentik repository
+  ansible.builtin.git:
+    repo: "https://github.com/goauthentik/authentik.git"
+    dest: "{{ authentik_install_dir }}/source"
+    version: "v{{ authentik_version }}"
+    depth: 1
+    force: true
+  become: true
+  become_user: "{{ authentik_user }}"
+
+- name: Create Python virtual environment
+  ansible.builtin.command:
+    cmd: "uv venv {{ authentik_install_dir }}/venv --python python3"
+    creates: "{{ authentik_install_dir }}/venv"
+
+- name: Install Python dependencies
+  ansible.builtin.command:
+    cmd: "uv pip install -r {{ authentik_install_dir }}/source/requirements.txt"
+  environment:
+    PATH: "{{ ansible_env.PATH }}:/usr/local/go/bin"
+  become: true
+  become_user: "{{ authentik_user }}"
+  changed_when: false
+
+- name: Install frontend dependencies
+  community.general.npm:
+    path: "{{ authentik_install_dir }}/source"
+  become: true
+  become_user: "{{ authentik_user }}"
+
+- name: Build web assets
+  ansible.builtin.command:
+    cmd: "make web"
+    chdir: "{{ authentik_install_dir }}/source"
+  environment:
+    PATH: "{{ ansible_env.PATH }}:/usr/local/go/bin"
+  become: true
+  become_user: "{{ authentik_user }}"
+  changed_when: false
+
+- name: Build server binary
+  ansible.builtin.command:
+    cmd: "make server"
+    chdir: "{{ authentik_install_dir }}/source"
+  environment:
+    PATH: "{{ ansible_env.PATH }}:/usr/local/go/bin"
+  become: true
+  become_user: "{{ authentik_user }}"
+  changed_when: false
+
+- name: Build worker binary
+  ansible.builtin.command:
+    cmd: "make worker"
+    chdir: "{{ authentik_install_dir }}/source"
+  environment:
+    PATH: "{{ ansible_env.PATH }}:/usr/local/go/bin"
+  become: true
+  become_user: "{{ authentik_user }}"
+  changed_when: false
+
+- name: Setup PostgreSQL database
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_db:
+    name: "{{ authentik_db_name }}"
+    encoding: 'UTF-8'
+    lc_collate: 'en_US.utf8'
+    lc_ctype: 'en_US.utf8'
+    template: 'template0'
+
+- name: Setup PostgreSQL user
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_user:
+    name: "{{ authentik_db_user }}"
+    password: "{{ authentik_db_password }}"
+    db: "{{ authentik_db_name }}"
+    role_attr_flags: "CREATEDB,LOGIN"
+
+- name: Configure PostgreSQL
+  community.postgresql.postgresql_pg_hba:
+    dest: /etc/postgresql/*/main/pg_hba.conf
+    contype: host
+    databases: "{{ authentik_db_name }}"
+    users: "{{ authentik_db_user }}"
+    method: md5
+    address: "<hidden-ip>/32"
+  notify: restart postgresql
+
+- name: Generate secret key if not provided
+  ansible.builtin.set_fact:
+    authentik_secret_key: "{{ 256 | random | string }}"
+  when: authentik_secret_key | length == 0
+
+- name: Create environment configuration
+  ansible.builtin.template:
+    src: environment.j2
+    dest: "{{ authentik_install_dir }}/.env"
+    owner: "{{ authentik_user }}"
+    group: "{{ authentik_user }}"
+    mode: '0600'
+
+- name: Copy server binary
+  ansible.builtin.copy:
+    src: "{{ authentik_install_dir }}/source/server"
+    dest: "{{ authentik_install_dir }}/bin/server"
+    owner: "{{ authentik_user }}"
+    group: "{{ authentik_user }}"
+    mode: '0755'
+    remote_src: true
+
+- name: Copy worker binary
+  ansible.builtin.copy:
+    src: "{{ authentik_install_dir }}/source/worker"
+    dest: "{{ authentik_install_dir }}/bin/worker"
+    owner: "{{ authentik_user }}"
+    group: "{{ authentik_user }}"
+    mode: '0755'
+    remote_src: true
+
+- name: Setup systemd service - server
+  ansible.builtin.template:
+    src: authentik-server.service.j2
+    dest: /etc/systemd/system/authentik-server.service
+    mode: '0644'
+  notify: restart authentik-server
+
+- name: Setup systemd service - worker
+  ansible.builtin.template:
+    src: authentik-worker.service.j2
+    dest: /etc/systemd/system/authentik-worker.service
+    mode: '0644'
+  notify: restart authentik-worker
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Enable and start services
+  ansible.builtin.service:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop:
+    - postgresql
+    - redis-server
+    - authentik-server
+    - authentik-worker
+
+- name: Wait for authentik to be ready
+  ansible.builtin.wait_for:
+    port: "{{ authentik_listen_port }}"
+    delay: 5
+    timeout: 120

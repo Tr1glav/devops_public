@@ -1,0 +1,211 @@
+---
+# ========== Patroni installation block (virtualenv) ==========
+- name: Create cache directory for Patroni
+  ansible.builtin.file:
+    path: "/var/cache/patroni"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  tags: [packages, patroni]
+
+- name: Check if version cache file exists
+  ansible.builtin.stat:
+    path: "/var/cache/patroni/version"
+  register: postgres_patroni_version_file
+  tags: [packages, patroni]
+
+- name: Check if cache timestamp exists
+  ansible.builtin.stat:
+    path: "/var/cache/patroni/last_updated"
+  register: postgres_patroni_timestamp_file
+  tags: [packages, patroni]
+
+- name: Determine if cache is fresh
+  ansible.builtin.set_fact:
+    postgres_patroni_cache_fresh: >-
+      {{
+        postgres_patroni_version_file.stat.exists
+        and postgres_patroni_timestamp_file.stat.exists
+        and (ansible_date_time.epoch | int)
+        - (postgres_patroni_timestamp_file.stat.mtime | int) < 604800
+      }}
+  tags: [packages, patroni]
+
+- name: Get cached Patroni version if fresh
+  when: postgres_patroni_cache_fresh | default(false)
+  tags: [packages, patroni]
+  block:
+    - name: Read cached version
+      ansible.builtin.slurp:
+        src: "/var/cache/patroni/version"
+      register: postgres_patroni_version_content
+
+    - name: Set cached version fact
+      ansible.builtin.set_fact:
+        postgres_patroni_cached_version: >-
+          {{ postgres_patroni_version_content.content |
+          b64decode | trim }}
+
+- name: Get latest Patroni release version (if cache expired or missing)
+  when: not postgres_patroni_cache_fresh | default(false)
+  tags: [packages, patroni]
+  block:
+    - name: Get latest Patroni release version from GitHub
+      ansible.builtin.uri:
+        url: "https://api.github.com/repos/zalando/patroni/releases/latest"
+        method: GET
+        return_content: true
+        body_format: json
+      register: postgres_patroni_release
+
+    - name: Cache latest Patroni version
+      ansible.builtin.copy:
+        content: "{{ postgres_patroni_release.json.tag_name }}"
+        dest: "/var/cache/patroni/version"
+        mode: '0644'
+
+    - name: Update cache timestamp
+      ansible.builtin.file:
+        path: "/var/cache/patroni/last_updated"
+        state: touch
+        mode: '0644'
+
+    - name: Set Patroni version from API
+      ansible.builtin.set_fact:
+        postgres_patroni_latest_version: >-
+          {{ postgres_patroni_release.json.tag_name }}
+        postgres_patroni_version_number: >-
+          {{ postgres_patroni_release.json.tag_name | replace('v', '') }}
+
+- name: Set Patroni version from cache if available
+  ansible.builtin.set_fact:
+    postgres_patroni_latest_version: >-
+      {{ postgres_patroni_cached_version }}
+    postgres_patroni_version_number: >-
+      {{ postgres_patroni_cached_version | replace('v', '') }}
+  when: postgres_patroni_cached_version is defined
+  tags: [packages, patroni]
+
+- name: Debug cache info
+  ansible.builtin.debug:
+    msg: >-
+      Cache exists: {{
+        postgres_patroni_version_file.stat.exists | default(false) }},
+      Cache fresh: {{
+        postgres_patroni_cache_fresh | default(false) }},
+      Using version: {{ postgres_patroni_latest_version }}
+  tags: [packages, patroni]
+
+- name: Ensure build dependencies are installed
+  ansible.builtin.apt:
+    name:
+      - python3
+      - python3-pip
+      - python3-venv
+      - python3-dev
+      - python3-psycopg2
+      - build-essential
+      - libpq-dev
+      - git
+      - python3-virtualenv
+    state: present
+    update_cache: true
+  tags: [packages, patroni]
+
+- name: Create virtualenv directory
+  ansible.builtin.file:
+    path: "/opt/patroni-venv"
+    state: directory
+    owner: "{{ patroni_user }}"
+    group: "{{ patroni_group }}"
+    mode: '0755'
+  tags: [packages, patroni]
+
+- name: Create Python virtual environment
+  ansible.builtin.command: "python3 -m venv /opt/patroni-venv"
+  args:
+    creates: "/opt/patroni-venv/bin/activate"
+  changed_when: false
+  tags: [packages, patroni]
+
+- name: Check if Patroni archive is already cached
+  ansible.builtin.stat:
+    path: "/var/cache/patroni/patroni-{{
+      postgres_patroni_version_number }}.tar.gz"
+  register: postgres_patroni_archive_stat
+  tags: [packages, patroni]
+
+- name: Download Patroni source code (if not cached or cache expired)
+  ansible.builtin.get_url:
+    url: "https://github.com/zalando/patroni/archive/refs/tags/{{
+      postgres_patroni_latest_version }}.tar.gz"
+    dest: "/var/cache/patroni/patroni-{{
+      postgres_patroni_version_number }}.tar.gz"
+    mode: '0644'
+    force: true
+  when: not postgres_patroni_archive_stat.stat.exists
+  tags: [packages, patroni]
+
+- name: Copy Patroni archive from cache to temp
+  ansible.builtin.copy:
+    src: "/var/cache/patroni/patroni-{{
+      postgres_patroni_version_number }}.tar.gz"
+    dest: "/tmp/patroni-{{
+      postgres_patroni_version_number }}.tar.gz"
+    remote_src: true
+    mode: '0644'
+  tags: [packages, patroni]
+
+- name: Extract Patroni source code
+  ansible.builtin.unarchive:
+    src: "/tmp/patroni-{{ postgres_patroni_version_number }}.tar.gz"
+    dest: "/tmp/"
+    remote_src: true
+    creates: "/tmp/patroni-{{ postgres_patroni_version_number }}"
+  tags: [packages, patroni]
+
+- name: Install Patroni from source in virtualenv
+  ansible.builtin.pip:
+    name: "/tmp/patroni-{{ postgres_patroni_version_number }}"
+    virtualenv: "/opt/patroni-venv"
+    state: present
+    extra_args: "--no-cache-dir"
+  tags: [packages, patroni]
+
+- name: Install Patroni dependencies in virtualenv
+  ansible.builtin.pip:
+    name:
+      - psycopg2-binary
+      - python-etcd
+      - PyYAML
+    virtualenv: "/opt/patroni-venv"
+    state: present
+  tags: [packages, patroni]
+
+- name: Create patroni symlinks from virtualenv
+  ansible.builtin.file:
+    src: "/opt/patroni-venv/bin/{{ item }}"
+    dest: "/usr/bin/{{ item }}"
+    state: link
+    force: true
+  loop:
+    - patroni
+    - patronictl
+  tags: [patroni, binaries]
+
+- name: Clean up temporary files (keep cache)
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "/tmp/patroni-{{ postgres_patroni_version_number }}.tar.gz"
+    - "/tmp/patroni-{{ postgres_patroni_version_number }}"
+  tags: [packages, patroni]
+
+- name: Display cached Patroni info
+  ansible.builtin.debug:
+    msg: >-
+      Using Patroni version {{ postgres_patroni_latest_version }}
+      (from cache: {{ postgres_patroni_cached_version is defined }})
+  tags: [packages, patroni]

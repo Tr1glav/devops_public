@@ -1,0 +1,8 @@
+---
+- name: Install node_exporter
+  ansible.builtin.import_tasks: install_node_exporter.yml
+  when: inventory_hostname not in groups['k8s']
+
+- name: Remove node_exporter from Kubernetes nodes
+  ansible.builtin.import_tasks: remove_k8s.yml
+  when: inventory_hostname in groups['k8s']

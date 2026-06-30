@@ -1,0 +1,133 @@
+---
+- name: Update package cache
+  ansible.builtin.apt:
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Display detected settings
+  ansible.builtin.debug:
+    msg:
+      - "Router internal IP: {{ router_internal_ip }}"
+      - "WAN interface: {{ router_wan_interface }}"
+      - "LAN interface: {{ router_lan_interface }}"
+      - "Local subnet: {{ router_local_subnet }}"
+
+- name: Enable IP forwarding in sysctl
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    sysctl_set: false
+    state: present
+    reload: true
+  register: ip_forward
+
+- name: Show IP forwarding status
+  ansible.builtin.debug:
+    msg: >-
+      IP forwarding enabled (was {{
+      'already enabled' if not ip_forward.changed
+      else 'just enabled' }})
+
+- name: Clear existing NAT rules to avoid conflicts
+  ansible.builtin.iptables:
+    table: nat
+    chain: POSTROUTING
+    jump: SNAT
+    state: absent
+  failed_when: false
+
+- name: Add SNAT rule for local subnet (as per Cloud.ru documentation)
+  ansible.builtin.iptables:
+    table: nat
+    chain: POSTROUTING
+    source: "{{ router_local_subnet }}"
+    out_interface: "{{ router_wan_interface }}"
+    jump: SNAT
+    to_source: "{{ router_internal_ip }}"
+    comment: "SNAT traffic from local network to internet"
+
+- name: Ensure FORWARD policy allows traffic
+  ansible.builtin.iptables:
+    chain: FORWARD
+    policy: ACCEPT
+
+- name: Allow forwarding from LAN to WAN
+  ansible.builtin.iptables:
+    chain: FORWARD
+    in_interface: "{{ router_lan_interface }}"
+    out_interface: "{{ router_wan_interface }}"
+    jump: ACCEPT
+
+- name: Allow forwarding from WAN to LAN for established connections
+  ansible.builtin.iptables:
+    chain: FORWARD
+    in_interface: "{{ router_wan_interface }}"
+    out_interface: "{{ router_lan_interface }}"
+    ctstate: ESTABLISHED,RELATED
+    jump: ACCEPT
+
+- name: Install iptables if not present
+  ansible.builtin.package:
+    name: iptables
+    state: present
+
+- name: Install iptables-persistent for Debian family
+  ansible.builtin.package:
+    name: iptables-persistent
+    state: present
+  when: ansible_os_family == "Debian"
+
+- name: Create iptables directory
+  ansible.builtin.file:
+    path: /etc/iptables
+    state: directory
+    mode: '0755'
+
+- name: Save iptables rules (as per documentation)
+  ansible.builtin.shell:
+    cmd: |
+      iptables-save > /etc/iptables/iptables.rules
+  register: save_rules
+  changed_when: false
+
+- name: Enable netfilter-persistent service
+  ansible.builtin.systemd:
+    name: netfilter-persistent
+    enabled: true
+    state: started
+  when: ansible_os_family == "Debian"
+  failed_when: false
+
+- name: Show current NAT rules
+  ansible.builtin.command:
+    cmd: iptables -t nat -L POSTROUTING -n -v
+  register: nat_rules
+  changed_when: false
+
+- name: Display NAT rules
+  ansible.builtin.debug:
+    var: nat_rules.stdout_lines
+
+- name: Show FORWARD rules
+  ansible.builtin.command:
+    cmd: iptables -L FORWARD -n -v
+  register: forward_rules
+  changed_when: false
+
+- name: Display FORWARD rules
+  ansible.builtin.debug:
+    var: forward_rules.stdout_lines
+
+- name: Test connectivity to internet
+  ansible.builtin.command:
+    cmd: ping -c 2 -W 2 <hidden-ip>
+  register: ping_test
+  ignore_errors: true
+  changed_when: false
+
+- name: Display connectivity test result
+  ansible.builtin.debug:
+    msg: >-
+      {{ 'Router has internet connectivity'
+      if ping_test is succeeded
+      else 'Router has NO internet connectivity - check WAN connection' }}

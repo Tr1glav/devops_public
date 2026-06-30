@@ -1,0 +1,101 @@
+---
+- name: Create Nextcloud data directory
+  ansible.builtin.file:
+    path: "{{ nextcloud_data_dir }}"
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0750'
+
+- name: Ensure config directory exists
+  ansible.builtin.file:
+    path: /var/www/nextcloud/config
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0750'
+
+- name: Download Nextcloud
+  ansible.builtin.get_url:
+    url: >-
+      https://download.nextcloud.com/server/releases/nextcloud-{{
+      nextcloud_version }}.zip
+    dest: /tmp/nextcloud-{{ nextcloud_version }}.zip
+    mode: '0644'
+
+- name: Extract Nextcloud
+  ansible.builtin.unarchive:
+    src: /tmp/nextcloud-{{ nextcloud_version }}.zip
+    dest: /var/www/
+    remote_src: true
+    owner: www-data
+    group: www-data
+
+- name: Create .ocdata marker file
+  ansible.builtin.copy:
+    content: ""
+    dest: "{{ nextcloud_data_dir }}/.ocdata"
+    owner: www-data
+    group: www-data
+    mode: '0640'
+
+- name: Create database schema
+  ansible.builtin.command:
+    cmd: sudo -u www-data php /var/www/nextcloud/occ db:create
+  args:
+    chdir: /var/www/nextcloud
+  register: nextcloud_db_create
+  changed_when: false
+  failed_when: false
+
+- name: Add missing database indices
+  ansible.builtin.command:
+    cmd: sudo -u www-data php /var/www/nextcloud/occ db:add-missing-indices
+  args:
+    chdir: /var/www/nextcloud
+  changed_when: false
+  failed_when: false
+
+- name: Add missing columns
+  ansible.builtin.command:
+    cmd: sudo -u www-data php /var/www/nextcloud/occ db:add-missing-columns
+  args:
+    chdir: /var/www/nextcloud
+  changed_when: false
+  failed_when: false
+
+- name: Create admin user
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      echo "{{ nextcloud_admin_password }}" | sudo -u www-data \
+        php /var/www/nextcloud/occ user:add \
+        --password-from-stdin \
+        --display-name="Administrator" \
+        --group=admin \
+        "{{ nextcloud_admin_user }}"
+    chdir: /var/www/nextcloud
+  register: nextcloud_admin_created
+  changed_when: false
+  failed_when: false
+
+- name: Configure cron for Nextcloud
+  ansible.builtin.cron:
+    name: "Nextcloud cron"
+    minute: "*/5"
+    job: "php -f /var/www/nextcloud/cron.php"
+    user: www-data
+
+- name: Install Previewgenerator
+  ansible.builtin.command:
+    cmd: "php {{ nextcloud_install_dir }}/occ app:install previewgenerator"
+  become: true
+  become_user: "www-data"
+  changed_when: false
+
+- name: Enable Previewgenerator
+  ansible.builtin.command:
+    cmd: "php {{ nextcloud_install_dir }}/occ app:enable previewgenerator"
+  become: true
+  become_user: "www-data"
+  changed_when: false

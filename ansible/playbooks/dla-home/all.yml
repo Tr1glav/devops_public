@@ -1,0 +1,12 @@
+---
+- name: Configure resolved
+  hosts: all
+  become: true
+  roles:
+    - role: vm/resolved
+
+- name: Configure logrotate
+  hosts: all
+  become: true
+  roles:
+    - vm/logrotate

@@ -1,0 +1,71 @@
+---
+- name: Wait for PostgreSQL to be ready
+  community.postgresql.postgresql_ping:
+    login_user: postgres
+    login_password: >-
+      {{ (postgres_vault_secrets.json.data.data.superuser_password)
+      | default('') }}
+    login_unix_socket: "/var/run/postgresql/"
+  register: postgres_pg_connection
+  until: postgres_pg_connection.is_available
+  retries: 10
+  delay: 5
+
+- name: Create user {{ user_info.key }}
+  community.postgresql.postgresql_user:
+    name: "{{ user_info.key }}"
+    password: "{{ user_info.value.pass }}"
+    encrypted: true
+    login_user: postgres
+    login_password: >-
+      {{ (postgres_vault_secrets.json.data.data.superuser_password)
+      | default('') }}
+    login_unix_socket: "/var/run/postgresql/"
+
+- name: Grant CONNECT
+  community.postgresql.postgresql_query:
+    query: >-
+      GRANT CONNECT ON DATABASE "{{ item }}" TO "{{ user_info.key }}";
+    db: "{{ item }}"
+    login_user: postgres
+    login_password: >-
+      {{ (postgres_vault_secrets.json.data.data.superuser_password)
+      | default('') }}
+    login_unix_socket: "/var/run/postgresql/"
+  loop: >-
+    {{ (user_info.value.write.split(',') + user_info.value.read.split(','))
+    | unique }}
+  when: item | length > 0
+
+- name: Grant all required privileges for write databases
+  community.postgresql.postgresql_query:
+    query: |
+      GRANT USAGE ON SCHEMA public TO "{{ user_info.key }}";
+      GRANT INSERT, UPDATE, DELETE
+      ON ALL TABLES IN SCHEMA public TO "{{ user_info.key }}";
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public
+      GRANT INSERT, UPDATE, DELETE ON TABLES TO "{{ user_info.key }}";
+    db: "{{ item }}"
+    login_user: postgres
+    login_password: >-
+      {{ (postgres_vault_secrets.json.data.data.superuser_password)
+      | default('') }}
+    login_unix_socket: "/var/run/postgresql/"
+  loop: "{{ user_info.value.write.split(',') }}"
+  when: user_info.value.write | default('') | length > 0
+
+- name: Grant all required privileges for read databases
+  community.postgresql.postgresql_query:
+    query: |
+      GRANT USAGE ON SCHEMA public TO "{{ user_info.key }}";
+      GRANT SELECT ON ALL TABLES IN SCHEMA public TO "{{ user_info.key }}";
+      ALTER DEFAULT PRIVILEGES IN SCHEMA public
+      GRANT SELECT ON TABLES TO "{{ user_info.key }}";
+    db: "{{ item }}"
+    login_user: postgres
+    login_password: >-
+      {{ (postgres_vault_secrets.json.data.data.superuser_password)
+      | default('') }}
+    login_unix_socket: "/var/run/postgresql/"
+  loop: "{{ user_info.value.read.split(',') }}"
+  when: user_info.value.read | default('') | length > 0

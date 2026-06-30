@@ -1,0 +1,6 @@
+---
+- name: Install openconnect_client
+  hosts: vpn-connector
+  become: true
+  roles:
+    - role: openconnect_client

@@ -1,0 +1,32 @@
+---
+- name: Ensure PostgreSQL is stopped and disabled
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: stopped
+    enabled: false
+  loop:
+    - "postgresql"
+    - "postgresql@{{ postgres_version }}-main"
+  when: ansible_os_family == 'Debian'
+  tags: [postgresql, systemd]
+
+- name: Reload systemd daemon
+  ansible.builtin.systemd:
+    daemon_reload: true
+  tags: [systemd]
+
+- name: Ensure Patroni is enabled
+  ansible.builtin.systemd:
+    name: patroni
+    enabled: true
+    daemon_reload: true
+  tags: [patroni, systemd]
+
+- name: Start Patroni service
+  ansible.builtin.systemd:
+    name: patroni
+    state: started
+  register: postgres_patroni_start_result
+  async: 120
+  poll: 0
+  tags: [patroni, systemd]
