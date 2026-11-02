@@ -1,0 +1,6 @@
+---
+- name: Install ocserv
+  hosts: router
+  become: true
+  roles:
+    - role: ocserv

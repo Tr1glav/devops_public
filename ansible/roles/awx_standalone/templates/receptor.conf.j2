@@ -1,0 +1,18 @@
+---
+- node:
+    id: {{ ansible_hostname }}
+
+- log-level: info
+
+- tcp-listener:
+    port: {{ awx_receptor_port }}
+
+- control-service:
+    service: control
+    filename: /var/run/receptor/receptor.sock
+
+- work-command:
+    worktype: local
+    command: {{ awx_venv_dir }}/bin/ansible-runner
+    params: worker
+    allowruntimeparams: true

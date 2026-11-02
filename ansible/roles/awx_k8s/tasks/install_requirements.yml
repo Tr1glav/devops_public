@@ -1,0 +1,43 @@
+---
+- name: Установка зависимостей
+  ansible.builtin.package:
+    name:
+      - curl
+      - git
+      - python3-kubernetes
+      - python3-yaml
+    state: present
+    update_cache: true
+
+- name: Check if helm is already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/helm
+  register: awx_k8s_helm_binary
+
+- name: Download helm install script
+  ansible.builtin.get_url:
+    url: "{{ awx_k8s_helm_install_script_url }}"
+    dest: /tmp/get_helm.sh
+    mode: '0755'
+  when: not awx_k8s_helm_binary.stat.exists
+
+- name: Install helm
+  ansible.builtin.command:
+    cmd: /tmp/get_helm.sh
+  environment:
+    DESIRED_VERSION: "{{ awx_k8s_helm_version }}"
+  when: not awx_k8s_helm_binary.stat.exists
+  register: awx_k8s_helm_install_result
+  changed_when: awx_k8s_helm_install_result.rc == 0
+
+- name: Check kubeconfig
+  ansible.builtin.stat:
+    path: "{{ awx_k8s_kubeconfig }}"
+  register: awx_k8s_kubeconfig_file
+
+- name: Fail if kubernetes cluster is not available
+  ansible.builtin.fail:
+    msg: >-
+      Kubeconfig {{ awx_k8s_kubeconfig }} не найден.
+      AWX разворачивается в кластере, сначала примените роль k3s
+  when: not awx_k8s_kubeconfig_file.stat.exists

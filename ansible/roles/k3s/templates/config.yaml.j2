@@ -1,0 +1,23 @@
+# {{ ansible_managed }}
+{% if k3s_mode == "server" %}
+{% if k3s_tls_san | length > 0 %}
+tls-san:
+{% for san in k3s_tls_san %}
+  - {{ san }}
+{% endfor %}
+{% endif %}
+{% if k3s_disabled_components | length > 0 %}
+disable:
+{% for item in k3s_disabled_components %}
+  - {{ item }}
+{% endfor %}
+{% endif %}
+cluster-name: {{ k3s_cluster_name }}
+node-name: {{ k3s_node_name }}
+flannel-backend: {{ k3s_flannel_backend }}
+cluster-cidr: {{ k3s_cluster_cidr }}
+service-cidr: {{ k3s_service_cidr }}
+cluster-dns: {{ k3s_cluster_dns }}
+data-dir: {{ k3s_data_dir }}
+write-kubeconfig-mode: 0644
+{% endif %}

@@ -1,0 +1,6 @@
+---
+- name: Install BGP announcer (route feed for MikroTik)
+  hosts: wh-list
+  become: true
+  roles:
+    - role: bgp_announcer

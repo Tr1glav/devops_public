@@ -1,0 +1,82 @@
+global:
+  enabled: true
+  tlsDisable: {{ vault_k8s_tls_disable | lower }}
+
+injector:
+  enabled: {{ vault_k8s_injector_enabled | lower }}
+
+server:
+  image:
+    repository: hashicorp/vault
+    tag: "{{ vault_k8s_vault_version }}"
+    pullPolicy: IfNotPresent
+
+  {{ vault_k8s_mode }}:
+    enabled: true
+
+{% if vault_k8s_mode == 'ha'  %}
+  ha:
+    enabled: true
+    replicas: {{ vault_k8s_ha_replicas }}
+    raft:
+      enabled: true
+      setNodeId: true
+      config: |
+        ui = {{ vault_k8s_ui_enabled | lower }}
+        listener "tcp" {
+          tls_disable = {{ vault_k8s_tls_disable | lower }}
+          address = "[::]:8200"
+          cluster_address = "[::]:8201"
+        }
+        storage "raft" {
+          path = "/vault/data"
+        }
+        service_registration "kubernetes" {}
+{% else  %}
+  standalone:
+    enabled: true
+    config: |
+      ui = {{ vault_k8s_ui_enabled | lower }}
+      listener "tcp" {
+        tls_disable = {{ vault_k8s_tls_disable | lower }}
+        address = "[::]:8200"
+        cluster_address = "[::]:8201"
+      }
+      storage "raft" {
+        path = "/vault/data"
+      }
+      service_registration "kubernetes" {}
+{% endif  %}
+
+  dataStorage:
+    enabled: true
+    size: {{ vault_k8s_storage_size }}
+    {% if vault_k8s_storage_class  %}
+    storageClass: "{{ vault_k8s_storage_class }}"
+    {% endif  %}
+    mountPath: "/vault/data"
+
+  auditStorage:
+    enabled: {{ vault_k8s_audit_enabled | lower }}
+    size: 10Gi
+    mountPath: "/vault/audit"
+
+  serviceAccount:
+    create: true
+    name: "vault"
+
+  service:
+    enabled: true
+    type: {{ vault_k8s_service_type }}
+    port: 8200
+    clusterPort: 8201
+
+  resources: {{ vault_k8s_resources | to_nice_yaml | indent(4) }}
+
+ui:
+  enabled: {{ vault_k8s_ui_enabled | lower }}
+  serviceType: {{ vault_k8s_service_type }}
+
+{% if vault_k8s_extra_values  %}
+{{ vault_k8s_extra_values | to_nice_yaml }}
+{% endif  %}

@@ -1,0 +1,12 @@
+---
+- name: Restart vault
+  kubernetes.core.helm:
+    name: "{{ vault_k8s_release_name }}"
+    chart_ref: hashicorp/vault
+    state: restarted
+  when: false
+
+- name: Uninstall vault
+  kubernetes.core.helm:
+    name: "{{ vault_k8s_release_name }}"
+    state: absent

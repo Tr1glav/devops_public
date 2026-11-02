@@ -1,0 +1,11 @@
+---
+product_team: dla
+env: prod
+product_env: "{{ product_team }}-{{ env }}"
+
+domain: dla.su
+
+resolved_conf_dns: []
+
+router_local_subnet: "<hidden-ip>/24"
+router_internal_ip: "<hidden-ip>"

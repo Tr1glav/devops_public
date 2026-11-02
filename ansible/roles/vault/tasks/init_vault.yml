@@ -1,0 +1,66 @@
+---
+- name: Check initialization status
+  ansible.builtin.command:
+    cmd: "vault status -format=json"
+  environment:
+    VAULT_ADDR: "{{ vault_api_addr }}"
+  register: vault_status
+  changed_when: false
+  ignore_errors: true
+  when:
+    - inventory_hostname == groups['vault']|first
+    - _vault_health.status in [200, 429, 472, 473, 501, 503]
+
+- name: Initialize Vault (if not initialized)
+  ansible.builtin.command:
+    cmd: >-
+      vault operator init -key-shares={{ vault_keyshares }}
+      -key-threshold={{ vault_keythreshold }} -format=json
+  environment:
+    VAULT_ADDR: "{{ vault_api_addr }}"
+  register: vault_init
+  when:
+    - inventory_hostname == groups['vault']|first
+    - >-
+        vault_status.stdout is not defined or
+        not (vault_status.stdout | from_json).initialized
+    - _vault_health.status in [200, 429, 472, 473, 501, 503]
+  retries: 3
+  delay: 5
+  until: vault_init.rc == 0
+  changed_when: vault_init.rc == 0
+  no_log: true
+
+- name: Save initialization keys
+  ansible.builtin.set_fact:
+    vault_unseal_keys: "{{ (vault_init.stdout | from_json).unseal_keys_b64 }}"
+    vault_root_token: "{{ (vault_init.stdout | from_json).root_token }}"
+  when:
+    - inventory_hostname == groups['vault']|first
+    - vault_init is changed
+    - vault_init.rc == 0
+  no_log: true
+
+- name: Save keys to file
+  ansible.builtin.copy:
+    content: |
+      # Храните эти ключи в безопасном месте!
+      Unseal Keys:
+      {% for key in vault_unseal_keys %}
+      Key {{ loop.index }}: {{ key }}
+      {% endfor %}
+      Initial Root Token: {{ vault_root_token }}
+    dest: "/root/vault_init_keys.txt"
+    mode: '0600'
+  when:
+    - vault_unseal_keys|length > 0
+  no_log: true
+
+- name: Check if keys file exists (on leader)
+  ansible.builtin.stat:
+    path: "/root/vault_init_keys.txt"
+  register: vault_keys_file
+  when:
+    - inventory_hostname == groups['vault']|first
+    - vault_unseal_keys|length == 0
+  changed_when: false

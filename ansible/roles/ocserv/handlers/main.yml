@@ -1,0 +1,10 @@
+---
+- name: Restart ocserv
+  ansible.builtin.systemd:
+    name: ocserv
+    state: restarted
+    daemon_reload: true
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true

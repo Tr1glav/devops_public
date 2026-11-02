@@ -1,0 +1,24 @@
+[Unit]
+Description=OpenConnect VPN Connection on %I
+After=network.target network-online.target nss-lookup.target
+Wants=network-online.target
+
+[Service]
+Type=forking
+PIDFile=/run/openconnect.%i.pid
+ExecStart=/etc/openconnect/%i.conf
+ExecStop=/usr/bin/pkill -F /run/openconnect.%i.pid 2>/dev/null || /usr/bin/pkill -f "openconnect.*%i"
+ExecStopPost=/bin/sh -c 'ip link delete %i 2>/dev/null || true'
+Restart=on-failure
+RestartSec=10
+KillMode=process
+ExecStartPre=/bin/sh -c 'sysctl -w net.ipv4.ip_forward=1'
+ExecStartPre=/bin/sh -c 'iptables -t nat -F POSTROUTING'
+ExecStartPost=/bin/sh -c 'sleep 1; ip route del {{ openconnect_client_internal_network }} dev %i 2>/dev/null || true'
+ExecStartPost=/bin/sh -c 'sleep 5; iptables -t nat -A POSTROUTING -s {{ openconnect_client_vpn_network }} -o eth0 -j MASQUERADE'
+ExecStop=/bin/sh -c 'iptables -t nat -F POSTROUTING'
+ExecStop=/bin/sh -c 'sysctl -w net.ipv4.ip_forward=0'
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target

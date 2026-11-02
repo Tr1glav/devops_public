@@ -1,0 +1,4 @@
+# {{ ansible_managed }}
+{{ item.path }} {
+    {{ item.options | join('\n    ') }}
+}

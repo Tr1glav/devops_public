@@ -1,0 +1,7 @@
+---
+- name: Install required packages
+  ansible.builtin.package:
+    name:
+      - wget
+      - fuse
+    state: present

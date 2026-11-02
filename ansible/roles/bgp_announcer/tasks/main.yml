@@ -1,0 +1,189 @@
+---
+- name: Assert BGP parameters are set
+  ansible.builtin.assert:
+    that:
+      - bgp_announcer_local_as | int > 0
+      - bgp_announcer_peer_as | int > 0
+      - bgp_announcer_peer_address | length > 0
+      - bgp_announcer_sources | length > 0
+    fail_msg: "bgp_announcer: не заданы local_as/peer_as/peer_address/sources"
+    quiet: true
+
+- name: Install BIRD
+  ansible.builtin.apt:
+    name: "{{ bgp_announcer_packages }}"
+    state: present
+    update_cache: true
+
+- name: Ensure state directory exists
+  ansible.builtin.file:
+    path: "{{ bgp_announcer_state_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Ensure BIRD config directory exists
+  ansible.builtin.file:
+    path: "{{ bgp_announcer_announced_file | dirname }}"
+    state: directory
+    owner: root
+    group: bird
+    mode: '0755'
+
+# Пустой include создаём до старта BIRD: конфиг ссылается на файл,
+# а наполняет его уже bgp-lists-update.
+- name: Ensure announced file exists
+  ansible.builtin.copy:
+    content: "# Сгенерировано bgp_lists_update.py\n"
+    dest: "{{ bgp_announcer_announced_file }}"
+    owner: root
+    group: bird
+    mode: '0644'
+    force: false
+
+- name: Install lists update script
+  ansible.builtin.copy:
+    src: bgp_lists_update.py
+    dest: "{{ bgp_announcer_script_path }}"
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Configure prefix list sources
+  ansible.builtin.copy:
+    content: |
+      # Источники префиксов для BGP-анонсов (по одному URL в строке).
+      {% for src in bgp_announcer_sources %}
+      {{ src }}
+      {% endfor %}
+    dest: "{{ bgp_announcer_state_dir }}/sources.list"
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Configure BIRD
+  ansible.builtin.template:
+    src: bird.conf.j2
+    dest: /etc/bird/bird.conf
+    owner: root
+    group: bird
+    mode: '0640'
+    validate: "bird -p -c %s"
+  notify: Reload bird
+
+- name: Install update service
+  ansible.builtin.template:
+    src: bgp-lists-update.service.j2
+    dest: /etc/systemd/system/bgp-lists-update.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload systemd
+
+- name: Install update timer
+  ansible.builtin.template:
+    src: bgp-lists-update.timer.j2
+    dest: /etc/systemd/system/bgp-lists-update.timer
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload systemd
+
+- name: Enable and start BIRD
+  ansible.builtin.systemd:
+    name: bird
+    state: started
+    enabled: true
+    daemon_reload: true
+
+- name: Apply pending BIRD config
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start lists update timer
+  ansible.builtin.systemd:
+    name: bgp-lists-update.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+
+# Первый прогон сразу наполняет announced.conf, иначе пир получит пустой анонс
+- name: Populate announced prefixes now
+  ansible.builtin.command:
+    cmd: >-
+      {{ bgp_announcer_script_path }}
+      --sources {{ bgp_announcer_state_dir }}/sources.list
+      --output {{ bgp_announcer_announced_file }}
+      --min-prefixlen {{ bgp_announcer_min_prefixlen }}
+      --max-prefixes {{ bgp_announcer_max_prefixes }}
+      --guard-state {{ bgp_announcer_guard_state }}
+  register: _bgp_announcer_first_run
+  changed_when: "'записано' in _bgp_announcer_first_run.stdout"
+  failed_when: _bgp_announcer_first_run.rc != 0 and 'без изменений' not in _bgp_announcer_first_run.stdout
+
+- name: Allow BGP from peer networks
+  ansible.builtin.shell: |
+    set -e
+    added=0
+    {% for net in bgp_announcer_allowed_networks %}
+    if ! iptables -C INPUT -s {{ net }} -p tcp --dport 179 -j ACCEPT 2>/dev/null; then
+      iptables -I INPUT 1 -s {{ net }} -p tcp --dport 179 -j ACCEPT && added=$((added+1))
+    fi
+    {% endfor %}
+    echo "added=$added"
+  register: _bgp_announcer_fw
+  changed_when: "'added=0' not in _bgp_announcer_fw.stdout"
+  when: bgp_announcer_firewall_enabled | bool
+
+- name: Show BGP summary
+  ansible.builtin.command: birdc show protocols
+  register: _bgp_announcer_protocols
+  changed_when: false
+  failed_when: false
+
+# --- Health-guard: тушим BGP-анонсы, когда туннель не работает -------------
+- name: Ensure guard state directory exists
+  ansible.builtin.file:
+    path: "{{ bgp_announcer_guard_state | dirname }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0755'
+  when: bgp_announcer_guard_enabled | bool
+
+- name: Install health guard script
+  ansible.builtin.copy:
+    src: bgp_guard.py
+    dest: "{{ bgp_announcer_guard_script }}"
+    owner: root
+    group: root
+    mode: '0755'
+  when: bgp_announcer_guard_enabled | bool
+
+- name: Install health guard service
+  ansible.builtin.template:
+    src: bgp-guard.service.j2
+    dest: /etc/systemd/system/bgp-guard.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload systemd
+  when: bgp_announcer_guard_enabled | bool
+
+- name: Install health guard timer
+  ansible.builtin.template:
+    src: bgp-guard.timer.j2
+    dest: /etc/systemd/system/bgp-guard.timer
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload systemd
+  when: bgp_announcer_guard_enabled | bool
+
+- name: Enable and start health guard timer
+  ansible.builtin.systemd:
+    name: bgp-guard.timer
+    state: started
+    enabled: true
+    daemon_reload: true
+  when: bgp_announcer_guard_enabled | bool

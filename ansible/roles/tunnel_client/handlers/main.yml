@@ -1,0 +1,15 @@
+---
+- name: Restart tunnel-client
+  ansible.builtin.systemd:
+    name: tunnel-client
+    state: restarted
+    daemon_reload: true
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Restart systemd-resolved
+  ansible.builtin.systemd:
+    name: systemd-resolved
+    state: restarted

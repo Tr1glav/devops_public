@@ -1,0 +1,16 @@
+---
+- name: Check if etcd binaries are installed
+  ansible.builtin.stat:
+    path: "/usr/local/bin/{{ item }}"
+  loop:
+    - etcd
+    - etcdctl
+  register: __etcd_binaries
+  changed_when: false
+
+- name: Fail if etcd binaries not found
+  ansible.builtin.fail:
+    msg: "etcd binaries were not installed correctly"
+  when: >-
+    not __etcd_binaries.results[0].stat.exists or
+    not __etcd_binaries.results[1].stat.exists

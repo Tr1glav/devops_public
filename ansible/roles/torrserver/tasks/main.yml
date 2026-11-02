@@ -1,0 +1,142 @@
+---
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+  changed_when: false
+  become: true
+
+- name: Install system dependencies
+  ansible.builtin.apt:
+    name:
+      - wget
+      - curl
+    state: present
+  become: true
+
+- name: Create torrserver system group
+  ansible.builtin.group:
+    name: "{{ torrserver_group }}"
+    system: true
+    state: present
+
+- name: Create torrserver system user
+  ansible.builtin.user:
+    name: "{{ torrserver_user }}"
+    group: "{{ torrserver_group }}"
+    system: true
+    home: "{{ torrserver_data_dir }}"
+    create_home: false
+    shell: /sbin/nologin
+    state: present
+
+- name: Create data directory
+  ansible.builtin.file:
+    path: "{{ torrserver_data_dir }}"
+    state: directory
+    owner: "{{ torrserver_user }}"
+    group: "{{ torrserver_group }}"
+    mode: '0755'
+  become: true
+
+- name: Create download directory
+  ansible.builtin.file:
+    path: "{{ torrserver_download_dir }}"
+    state: directory
+    owner: "{{ torrserver_user }}"
+    group: "{{ torrserver_group }}"
+    mode: '0755'
+  become: true
+
+- name: Create log directory
+  ansible.builtin.file:
+    path: "{{ torrserver_log_dir }}"
+    state: directory
+    owner: "{{ torrserver_user }}"
+    group: "{{ torrserver_group }}"
+    mode: '0755'
+  become: true
+
+- name: Check if torrserver is installed
+  ansible.builtin.stat:
+    path: "{{ torrserver_data_dir }}/TorrServer"
+  register: torrserver_installed
+
+- name: Download TorrServer
+  ansible.builtin.get_url:
+    url: >-
+      https://github.com/YouROK/TorrServer/releases/download/MatriX.141/TorrServer-linux-amd64
+    dest: "{{ torrserver_data_dir }}/TorrServer"
+    mode: '0755'
+  become: true
+  when: not torrserver_installed.stat.exists
+
+- name: Install TorrServer
+  ansible.builtin.shell:
+    cmd: |
+      cd /tmp
+      wget -q -O install_torrserver.sh \
+        https://raw.githubusercontent.com/YouROK/TorrServer/master/installTorrServerLinux.sh
+      chmod +x install_torrserver.sh
+    creates: "{{ torrserver_data_dir }}/TorrServer"
+  become: true
+  when: not torrserver_installed.stat.exists
+
+- name: Run install script
+  ansible.builtin.command:
+    cmd: bash /tmp/install_torrserver.sh --install --silent
+    creates: "{{ torrserver_data_dir }}/TorrServer"
+  become: true
+  when: not torrserver_installed.stat.exists
+
+- name: Make executable
+  ansible.builtin.file:
+    path: "{{ torrserver_data_dir }}/TorrServer"
+    mode: '0755'
+  become: true
+
+- name: Set ownership
+  ansible.builtin.file:
+    path: "{{ torrserver_data_dir }}"
+    owner: "{{ torrserver_user }}"
+    group: "{{ torrserver_group }}"
+    recurse: true
+    mode: '0755'
+  become: true
+
+- name: Create systemd service
+  ansible.builtin.copy:
+    dest: "/etc/systemd/system/{{ torrserver_service_name }}.service"
+    content: |
+      [Unit]
+      Description=TorrServer - Torrent stream server
+      After=network.target
+
+      [Service]
+      Type=simple
+      User={{ torrserver_user }}
+      Group={{ torrserver_group }}
+      WorkingDirectory={{ torrserver_data_dir }}
+      ExecStart={{ torrserver_data_dir }}/TorrServer \
+        --port {{ torrserver_port }} --ip {{ torrserver_ip }} \
+        --path {{ torrserver_data_dir }} \
+        --logpath {{ torrserver_log_dir }}/torrserver.log \
+        {% if torrserver_download_dir %}--torrentsdir \
+          {{ torrserver_download_dir }}{% endif %} \
+        {% if torrserver_httpauth %}--httpauth{% endif %} \
+        {% if torrserver_readonly %}--rdb{% endif %}
+      Restart=always
+      RestartSec=10
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: '0644'
+  become: true
+  register: torrserver_service
+
+- name: Enable and start torrserver service
+  ansible.builtin.systemd:
+    name: "{{ torrserver_service_name }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true

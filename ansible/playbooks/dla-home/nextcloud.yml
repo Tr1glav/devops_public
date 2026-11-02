@@ -1,0 +1,6 @@
+---
+- name: Configure nextcloud
+  hosts: nextcloud
+  become: true
+  roles:
+    - role: nextcloud

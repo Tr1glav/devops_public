@@ -1,0 +1,19 @@
+[Unit]
+Description=Authentik Worker
+After=network.target postgresql.service redis-server.service
+Wants=postgresql.service redis-server.service
+
+[Service]
+Type=simple
+User={{ authentik_user }}
+Group={{ authentik_user }}
+WorkingDirectory={{ authentik_install_dir }}
+EnvironmentFile={{ authentik_install_dir }}/.env
+ExecStart={{ authentik_install_dir }}/bin/worker
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

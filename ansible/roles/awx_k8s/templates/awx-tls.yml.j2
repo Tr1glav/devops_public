@@ -1,0 +1,12 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ awx_k8s_instance_name }}-tls
+  namespace: {{ awx_k8s_namespace }}
+type: kubernetes.io/tls
+stringData:
+  tls.crt: |
+    {{ _awx_ssl_certificate | indent(4) }}
+  tls.key: |
+    {{ _awx_ssl_private_key | indent(4) }}

@@ -1,0 +1,37 @@
+# -----------------------------
+# PostgreSQL Configuration File
+# -----------------------------
+
+data_directory = '{{ postgres_data_dir }}'
+hba_file = '/etc/postgresql/{{ postgres_version }}/{{ postgres_cluster_name }}/pg_hba.conf'
+ident_file = '/etc/postgresql/{{ postgres_version }}/{{ postgres_cluster_name }}/pg_ident.conf'
+
+listen_addresses = '*'
+port = 5432
+max_connections = 100
+
+# Memory Configuration
+shared_buffers = {{ postgres_shared_buffers }}
+work_mem = 16MB
+maintenance_work_mem = 64MB
+
+# WAL and Replication
+wal_level = {{ postgres_wal_level }}
+max_wal_senders = {{ postgres_max_wal_senders }}
+wal_keep_size = {{ postgres_wal_keep_size }}
+hot_standby = on
+
+# Logging
+log_destination = 'stderr'
+logging_collector = on
+log_directory = '/var/log/postgresql'
+log_filename = 'postgresql-%Y-%m-%d_%H%M%S.log'
+log_truncate_on_rotation = on
+log_rotation_age = 1d
+log_rotation_size = 10MB
+
+# Autovacuum
+autovacuum = on
+log_autovacuum_min_duration = 0
+autovacuum_max_workers = 3
+autovacuum_naptime = 1min

@@ -1,0 +1,5 @@
+---
+router_wan_interface: "{{ ansible_default_ipv4.interface }}"
+router_lan_interface: "{{ ansible_default_ipv4.interface }}"
+router_local_subnet: "<hidden-ip>/24"
+router_internal_ip: "{{ ansible_default_ipv4.address }}"

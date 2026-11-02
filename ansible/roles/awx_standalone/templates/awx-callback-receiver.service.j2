@@ -1,0 +1,20 @@
+[Unit]
+Description=AWX Callback Receiver
+After=network.target postgresql.service redis-server.service
+Wants=postgresql.service redis-server.service
+
+[Service]
+Type=simple
+User={{ awx_user }}
+Group={{ awx_group }}
+WorkingDirectory={{ awx_source_dir }}
+Environment=DJANGO_SETTINGS_MODULE=awx.settings.production
+Environment=AWX_SETTINGS_FILE={{ awx_config_dir }}/settings.py
+ExecStart={{ awx_venv_dir }}/bin/awx-manage run_callback_receiver
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

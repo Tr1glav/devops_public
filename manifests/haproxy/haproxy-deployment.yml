@@ -1,0 +1,43 @@
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  creationTimestamp: null
+  labels:
+    app: haproxy
+  name: haproxy
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: haproxy
+  strategy: {}
+  template:
+    metadata:
+      creationTimestamp: null
+      labels:
+        app: haproxy
+    spec:
+      securityContext:
+        runAsUser: 0
+      containers:
+        - image: haproxy
+          name: haproxy
+          volumeMounts:
+            - name: haproxy-config
+              mountPath: /usr/local/etc/haproxy/haproxy.cfg
+              subPath: haproxy.cfg
+            - name: ssl-dev
+              mountPath: /usr/local/etc/haproxy/ssl/dev.dla.su.pem
+              subPath: dev.dla.su.pem
+          resources:
+            requests:
+              cpu: 100m
+              memory: 100Mi
+      volumes:
+        - name: haproxy-config
+          configMap:
+            name: haproxy-config
+        - name: ssl-dev
+          configMap:
+            name: ssl-dev

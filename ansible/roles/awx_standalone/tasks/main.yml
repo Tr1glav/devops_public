@@ -1,0 +1,55 @@
+---
+- name: Get secrets
+  ansible.builtin.import_tasks: get_secrets.yml
+  tags:
+    - awx
+    - awx_secrets
+
+- name: Install requirements
+  ansible.builtin.import_tasks: install_requirements.yml
+  tags:
+    - awx
+    - awx_requirements
+
+- name: Install certs
+  ansible.builtin.import_tasks: install_ssl.yml
+  when: awx_enable_ssl
+  tags:
+    - awx
+    - awx_ssl
+
+- name: Configure SQL
+  ansible.builtin.import_tasks: configure_sql.yml
+  tags:
+    - awx
+    - awx_sql
+
+- name: Install awx
+  ansible.builtin.import_tasks: install_awx.yml
+  tags:
+    - awx
+    - awx_install
+
+- name: Install receptor
+  ansible.builtin.import_tasks: install_receptor.yml
+  tags:
+    - awx
+    - awx_receptor
+
+- name: Configure awx
+  ansible.builtin.import_tasks: configure_awx.yml
+  tags:
+    - awx
+    - awx_configure
+
+- name: Bootstrap awx
+  ansible.builtin.import_tasks: bootstrap_awx.yml
+  tags:
+    - awx
+    - awx_bootstrap
+
+- name: Configure front
+  ansible.builtin.import_tasks: configure_front.yml
+  tags:
+    - awx
+    - awx_front

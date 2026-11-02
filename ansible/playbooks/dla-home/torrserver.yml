@@ -1,0 +1,12 @@
+---
+- name: Configure jackett
+  hosts: torserver
+  become: true
+  roles:
+    - jackett
+
+- name: Configure torrserver
+  hosts: torserver
+  become: true
+  roles:
+    - torrserver

@@ -1,0 +1,102 @@
+---
+- name: Apply database migrations
+  ansible.builtin.command:
+    cmd: "{{ awx_venv_dir }}/bin/awx-manage migrate --noinput"
+  become: true
+  become_user: "{{ awx_user }}"
+  changed_when: false
+
+- name: Collect static files
+  ansible.builtin.command:
+    cmd: "{{ awx_venv_dir }}/bin/awx-manage collectstatic --noinput --clear"
+  become: true
+  become_user: "{{ awx_user }}"
+  changed_when: false
+
+- name: Create preload data
+  ansible.builtin.command:
+    cmd: "{{ awx_venv_dir }}/bin/awx-manage create_preload_data"
+  become: true
+  become_user: "{{ awx_user }}"
+  register: awx_preload_data
+  changed_when: "'Default organization added' in awx_preload_data.stdout"
+
+- name: Provision instance
+  ansible.builtin.command:
+    cmd: >-
+      {{ awx_venv_dir }}/bin/awx-manage provision_instance
+      --hostname={{ ansible_hostname }}
+      --node_type={{ awx_node_type }}
+  become: true
+  become_user: "{{ awx_user }}"
+  register: awx_provision_instance
+  changed_when: "'changed' in awx_provision_instance.stdout"
+
+- name: Register default execution environments
+  ansible.builtin.command:
+    cmd: >-
+      {{ awx_venv_dir }}/bin/awx-manage
+      register_default_execution_environments
+  become: true
+  become_user: "{{ awx_user }}"
+  changed_when: false
+
+- name: Register instance queue
+  ansible.builtin.command:
+    cmd: >-
+      {{ awx_venv_dir }}/bin/awx-manage register_queue
+      --queuename={{ awx_queue_name }}
+      --hostnames={{ ansible_hostname }}
+      --instance_percent=100
+  become: true
+  become_user: "{{ awx_user }}"
+  register: awx_register_queue
+  changed_when: "'changed' in awx_register_queue.stdout"
+
+- name: Create admin user
+  ansible.builtin.command:
+    cmd: >-
+      {{ awx_venv_dir }}/bin/awx-manage createsuperuser --noinput
+      --username={{ awx_admin_user }}
+      --email={{ awx_admin_email }}
+  environment:
+    DJANGO_SUPERUSER_PASSWORD: "{{ awx_admin_password }}"
+  become: true
+  become_user: "{{ awx_user }}"
+  register: awx_create_admin
+  failed_when: false
+  changed_when: awx_create_admin.rc == 0
+  no_log: true
+
+- name: Set admin password
+  ansible.builtin.command:
+    cmd: >-
+      {{ awx_venv_dir }}/bin/awx-manage update_password
+      --username={{ awx_admin_user }}
+      --password={{ awx_admin_password }}
+  become: true
+  become_user: "{{ awx_user }}"
+  register: awx_update_admin_password
+  changed_when: "'updated' in awx_update_admin_password.stdout"
+  no_log: true
+
+- name: Pull default execution environment image
+  containers.podman.podman_image:
+    name: "{{ awx_default_ee_image }}"
+    state: present
+  become: true
+  become_user: "{{ awx_user }}"
+  when: awx_install_podman
+
+- name: Enable and start awx services
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+  loop: "{{ awx_services }}"
+
+- name: Wait for awx to be ready
+  ansible.builtin.wait_for:
+    port: "{{ awx_uwsgi_port }}"
+    delay: 5
+    timeout: 300

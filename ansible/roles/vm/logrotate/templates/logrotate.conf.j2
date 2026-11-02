@@ -1,0 +1,12 @@
+# {{ ansible_managed }}
+su root root
+weekly
+rotate {{ rotate_weeks | default(4) }}
+compress
+delaycompress
+missingok
+notifempty
+maxsize {{ max_log_size | default('100M') }}
+minsize {{ min_log_size | default('1M') }}
+
+include /etc/logrotate.d

@@ -1,0 +1,8 @@
+---
+jackett_install_dir: /opt/jackett
+jackett_port: 9117
+jackett_user: jackett
+jackett_group: jackett
+jackett_service_name: jackett
+jackett_arch: LinuxAMDx64
+jackett_log_dir: /var/log/jackett

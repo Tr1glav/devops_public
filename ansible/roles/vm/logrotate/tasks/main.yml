@@ -1,0 +1,35 @@
+---
+- name: Install logrotate
+  ansible.builtin.package:
+    name: logrotate
+    state: present
+
+- name: Remove conflicting system log configs
+  ansible.builtin.file:
+    path: "/etc/logrotate.d/{{ item }}"
+    state: absent
+  loop:
+    - wtmp
+    - btmp
+    - alternatives
+    - dpkg
+    - apt
+    - rsyslog
+
+- name: Configure logrotate
+  ansible.builtin.template:
+    src: logrotate.conf.j2
+    dest: /etc/logrotate.conf
+    owner: root
+    group: root
+    mode: '0644'
+    validate: 'logrotate -d %s'
+
+- name: Add extra configurations
+  ansible.builtin.template:
+    src: extra.conf.j2
+    dest: "/etc/logrotate.d/{{ item.name }}"
+    owner: root
+    group: root
+    mode: '0644'
+  loop: "{{ extra_log_configs | default([]) }}"

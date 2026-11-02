@@ -1,0 +1,34 @@
+[Unit]
+Description=MeshCore bot
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User={{ meshcore_user }}
+Group={{ meshcore_group }}
+WorkingDirectory={{ meshcore_home }}
+
+Environment=HASS_GATE_URL={{ _meshcore_vault_secret.data.data.data.gate }}
+
+{% if meshcore_hass_timeout is defined %}
+Environment=HASS_TIMEOUT={{ meshcore_hass_timeout }}
+{% endif %}
+ExecStart={{ meshcore_home }}/venv/bin/python {{ meshcore_home }}/bot.py \
+{% if meshcore_channel is not none %}
+  --channel {{ meshcore_channel }} \
+{% endif %}
+{% if meshcore_auto_reconnect %}
+  --auto-reconnect \
+{% endif %}
+{% if meshcore_debug %}
+  --debug \
+{% endif %}
+  --host {{ meshcore_host }} \
+  --port {{ meshcore_port }} \
+  --max-channels {{ meshcore_max_channels }}
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

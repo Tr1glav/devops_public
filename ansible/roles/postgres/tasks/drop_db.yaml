@@ -1,0 +1,44 @@
+---
+- name: Drop PostgreSQL database {{ item }}
+  community.postgresql.postgresql_db:
+    name: "{{ item }}"
+    state: absent
+    login_user: postgres
+    login_password: >-
+      {{ (postgres_vault_secrets.json.data.data.superuser_password)
+      | default('') }}
+    login_unix_socket: "/var/run/postgresql/"
+
+- name: Revoke all privileges before user removal
+  community.postgresql.postgresql_privs:
+    database: "postgres"
+    roles: "{{ item }}"
+    privs: "ALL"
+    type: database
+    state: absent
+    login_user: "postgres"
+    login_password: >-
+      {{ (postgres_vault_secrets.json.data.data.superuser_password)
+      | default('') }}
+    login_unix_socket: "/var/run/postgresql/"
+
+- name: Cleanup leftover objects
+  community.postgresql.postgresql_query:
+    query: |
+      DROP OWNED BY "{{ item }}" CASCADE;
+    login_user: "postgres"
+    login_password: >-
+      {{ (postgres_vault_secrets.json.data.data.superuser_password)
+      | default('') }}
+    login_unix_socket: "/var/run/postgresql/"
+  failed_when: false
+
+- name: Drop PostgreSQL user
+  community.postgresql.postgresql_user:
+    name: "{{ item }}"
+    state: absent
+    login_user: "postgres"
+    login_password: >-
+      {{ (postgres_vault_secrets.json.data.data.superuser_password)
+      | default('') }}
+    login_unix_socket: "/var/run/postgresql/"

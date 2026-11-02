@@ -1,0 +1,17 @@
+[Unit]
+Description=Tunnel client (Xray, api.tunnel.pw pool)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+Environment=TUNNEL_CREDS={{ tunnel_client_creds_file }}
+{% if tunnel_client_tproxy_enabled %}
+Environment=TUNNEL_TPROXY_PORT={{ tunnel_client_tproxy_port }}
+{% endif %}
+ExecStart={{ ansible_python_interpreter | default('/usr/bin/python3') }} {{ tunnel_client_install_dir }}/tunnel_client.py {{ tunnel_client_service_cmd }}
+Restart=on-failure
+RestartSec=15
+
+[Install]
+WantedBy=multi-user.target

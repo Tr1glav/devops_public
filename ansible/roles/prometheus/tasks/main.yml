@@ -1,0 +1,9 @@
+---
+- name: Install requirements
+  ansible.builtin.import_tasks: install_requirements.yml
+
+- name: Configure prometheus
+  ansible.builtin.import_tasks: configure_prometheus.yml
+
+- name: Generate targets
+  ansible.builtin.import_tasks: generate_targets.yml

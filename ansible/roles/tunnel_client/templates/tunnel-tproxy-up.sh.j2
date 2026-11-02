@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# TPROXY для транзита через tunnel-client.
+# Идемпотентно: можно запускать повторно (ansible + каждый boot).
+# Вывод: "changed=0" если ничего не требовалось менять.
+set -euo pipefail
+
+PORT={{ tunnel_client_tproxy_port }}
+changed=0
+
+# --- ip rule / ip route для маркированных пакетов -------------------------
+if ! ip rule show | grep -q 'fwmark 0x1 lookup 100'; then
+  ip rule add fwmark 0x1 lookup 100
+  changed=1
+fi
+
+if ! ip route show table 100 | grep -q '^local default'; then
+  ip route add local 0.0.0.0/0 dev lo table 100
+  changed=1
+fi
+
+add() {
+  if ! iptables -t mangle -C "$@" 2>/dev/null; then
+    iptables -t mangle -A "$@" && changed=1
+  fi
+}
+
+del() {
+  if iptables -t mangle -C "$@" 2>/dev/null; then
+    iptables -t mangle -D "$@" && changed=1
+  fi
+}
+
+iptables -t mangle -N TUNNEL_TP_DIVERT 2>/dev/null || true
+iptables -t mangle -N TUNNEL_TP 2>/dev/null || true
+
+# Локальные (уже проксированные) сокеты — отдаём ядру, иначе петля
+add PREROUTING -p tcp -m socket -j TUNNEL_TP_DIVERT
+add PREROUTING -p udp -m socket -j TUNNEL_TP_DIVERT
+add TUNNEL_TP_DIVERT -j MARK --set-mark 0x1
+add TUNNEL_TP_DIVERT -j ACCEPT
+
+{% for src in tunnel_client_transit_sources %}
+add PREROUTING -s {{ src }} -p tcp -j TUNNEL_TP
+add PREROUTING -s {{ src }} -p udp -j TUNNEL_TP
+# Устаревшие правила первых версий роли (TPROXY прямо в PREROUTING без
+# bypass-портов) уводили в туннель SSH и BGP — вычищаем.
+del PREROUTING -s {{ src }} -p tcp -j TPROXY --on-port "$PORT" --tproxy-mark 0x1/0x1
+del PREROUTING -s {{ src }} -p udp -j TPROXY --on-port "$PORT" --tproxy-mark 0x1/0x1
+{% endfor %}
+
+# Административные/служебные порты — напрямую, без TPROXY: SSH (иначе при
+# остановке Xray чёрная дыра) и BGP (иначе SYN уходит в туннель петлёй)
+{% for port in tunnel_client_tproxy_bypass_ports %}
+add TUNNEL_TP -p tcp --dport {{ port }} -j RETURN
+{% endfor %}
+
+add TUNNEL_TP -p tcp -j TPROXY --on-port "$PORT" --tproxy-mark 0x1/0x1
+add TUNNEL_TP -p udp -j TPROXY --on-port "$PORT" --tproxy-mark 0x1/0x1
+
+echo "changed=$changed"

@@ -1,0 +1,6 @@
+---
+- name: Configure router
+  hosts: router
+  become: true
+  roles:
+    - vm/router

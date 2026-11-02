@@ -1,0 +1,18 @@
+[Unit]
+Description=Temporal UI Server
+After=network.target
+Requires=temporal.service
+
+[Service]
+Type=simple
+User={{ temporal_user }}
+Group={{ temporal_group }}
+ExecStart={{ bin_dir }}/temporal-ui-server --config {{ temporal_home }}/temporal-ui.yaml
+Restart=always
+RestartSec=5
+# Безопасность
+NoNewPrivileges=yes
+PrivateTmp=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,8 @@
+{% for user in pgbouncer_users  %}
+
+"{{ user.name }}" "{{ user.password | default(pgbouncer_auth_user_password) }}"
+
+{% endfor  %}
+
+"postgres" "{{ postgres_superuser_password }}"
+"pgbouncer" "{{ pgbouncer_admin_password }}"

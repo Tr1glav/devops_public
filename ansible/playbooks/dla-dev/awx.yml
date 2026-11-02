@@ -1,0 +1,6 @@
+---
+- name: Install awx
+  hosts: ansible
+  become: true
+  roles:
+    - role: awx_standalone

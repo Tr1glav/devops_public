@@ -1,0 +1,27 @@
+---
+# VPN connection settings
+openconnect_client_vault_mount: "infra"
+openconnect_client_vault_path: "prod/vpn/users"
+openconnect_client_server: "vpn.dla.su"
+openconnect_client_vpn_network: "<hidden-ip>/24"
+openconnect_client_port: 443
+openconnect_client_background: true
+openconnect_client_background_script: true
+# Interface settings
+openconnect_client_interface: "vpn0"
+openconnect_client_internal_network: >-
+  {{ ansible_default_ipv4.network }}/{{ ansible_default_ipv4.prefix }}
+openconnect_client_internal_interface: >-
+  {{ ansible_default_ipv4.interface }}
+openconnect_client_mtu: 1400
+openconnect_client_reconnect_timeout: 30
+openconnect_client_vpnc_script: "/usr/share/vpnc-scripts/vpnc-script"
+openconnect_client_packages:
+  - openconnect
+  - vpnc-scripts
+
+openconnect_client_use_certificate: false
+openconnect_client_cert_path: ""
+openconnect_client_key_path: ""
+openconnect_client_server_cert_hash: ""
+openconnect_client_extra_opts: ""

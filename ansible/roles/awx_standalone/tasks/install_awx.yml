@@ -1,0 +1,81 @@
+---
+- name: Check if awx is already installed
+  ansible.builtin.stat:
+    path: "{{ awx_venv_dir }}/bin/awx-manage"
+  register: awx_manage_binary
+
+- name: Clone awx repository
+  ansible.builtin.git:
+    repo: "https://github.com/ansible/awx.git"
+    dest: "{{ awx_source_dir }}"
+    version: "{{ awx_version }}"
+    depth: 1
+    force: true
+  become: true
+  become_user: "{{ awx_user }}"
+  register: awx_source
+
+- name: Create Python virtual environment
+  ansible.builtin.command:
+    cmd: "{{ awx_python }} -m venv {{ awx_venv_dir }}"
+    creates: "{{ awx_venv_dir }}/bin/python"
+  become: true
+  become_user: "{{ awx_user }}"
+
+- name: Install pip and build tools
+  ansible.builtin.pip:
+    name:
+      - pip
+      - setuptools
+      - setuptools_scm
+      - wheel
+    state: present
+    virtualenv: "{{ awx_venv_dir }}"
+  become: true
+  become_user: "{{ awx_user }}"
+
+- name: Install Python dependencies
+  ansible.builtin.pip:
+    requirements: "{{ awx_source_dir }}/requirements/requirements.txt"
+    virtualenv: "{{ awx_venv_dir }}"
+  become: true
+  become_user: "{{ awx_user }}"
+
+- name: Install Python git dependencies
+  ansible.builtin.pip:
+    requirements: "{{ awx_source_dir }}/requirements/requirements_git.txt"
+    virtualenv: "{{ awx_venv_dir }}"
+  become: true
+  become_user: "{{ awx_user }}"
+
+- name: Install uwsgi and daphne
+  ansible.builtin.pip:
+    name:
+      - uwsgi
+      - daphne
+    virtualenv: "{{ awx_venv_dir }}"
+  become: true
+  become_user: "{{ awx_user }}"
+
+- name: Build web assets
+  ansible.builtin.command:
+    cmd: "make ui-release"
+    chdir: "{{ awx_source_dir }}"
+  environment:
+    NODE_OPTIONS: "--max-old-space-size=4096"
+  become: true
+  become_user: "{{ awx_user }}"
+  when: awx_source is changed or not awx_manage_binary.stat.exists
+  changed_when: false
+
+- name: Install awx package
+  ansible.builtin.pip:
+    name: "{{ awx_source_dir }}"
+    editable: true
+    virtualenv: "{{ awx_venv_dir }}"
+  environment:
+    SETUPTOOLS_SCM_PRETEND_VERSION: "{{ awx_version }}"
+  become: true
+  become_user: "{{ awx_user }}"
+  notify:
+    - Restart awx

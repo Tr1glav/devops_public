@@ -1,0 +1,15 @@
+---
+- name: Install QEMU Guest Agent (only for non-containers)
+  ansible.builtin.apt:
+    name: qemu-guest-agent
+    state: present
+  when:
+    - not vm_is_container
+    - env == 'dev'
+
+- name: Start and enable QEMU Guest Agent (only for non-containers)
+  ansible.builtin.systemd:
+    name: qemu-guest-agent
+    state: started
+    enabled: true
+  when: not vm_is_container

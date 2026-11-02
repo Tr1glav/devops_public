@@ -1,0 +1,65 @@
+---
+- name: Create admin password secret
+  kubernetes.core.k8s:
+    kubeconfig: "{{ awx_k8s_kubeconfig }}"
+    definition: "{{ lookup('template', 'awx-admin-password.yml.j2') }}"
+    state: present
+  no_log: true
+
+- name: Create postgres configuration secret
+  kubernetes.core.k8s:
+    kubeconfig: "{{ awx_k8s_kubeconfig }}"
+    definition: "{{ lookup('template', 'awx-postgres-configuration.yml.j2') }}"
+    state: present
+  no_log: true
+  when: awx_k8s_postgres_type == "unmanaged"
+
+- name: Create TLS secret
+  kubernetes.core.k8s:
+    kubeconfig: "{{ awx_k8s_kubeconfig }}"
+    definition: "{{ lookup('template', 'awx-tls.yml.j2') }}"
+    state: present
+  no_log: true
+  when:
+    - awx_k8s_enable_ssl
+    - _awx_ssl_certificate | default('') | length > 0
+
+- name: Deploy AWX instance
+  kubernetes.core.k8s:
+    kubeconfig: "{{ awx_k8s_kubeconfig }}"
+    definition: "{{ lookup('template', 'awx.yml.j2') }}"
+    state: present
+
+- name: Wait for awx-web deployment
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ awx_k8s_kubeconfig }}"
+    kind: Deployment
+    namespace: "{{ awx_k8s_namespace }}"
+    name: "{{ awx_k8s_instance_name }}-web"
+  register: awx_k8s_web_deployment
+  retries: 60
+  delay: 15
+  until:
+    - awx_k8s_web_deployment.resources | length > 0
+    - >-
+      awx_k8s_web_deployment.resources[0].status.readyReplicas | default(0)
+      == awx_k8s_web_replicas
+
+- name: Wait for awx to be ready
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ awx_k8s_kubeconfig }}"
+    kind: Pod
+    namespace: "{{ awx_k8s_namespace }}"
+    label_selectors:
+      - "app.kubernetes.io/name={{ awx_k8s_instance_name }}-web"
+    field_selectors:
+      - "status.phase=Running"
+    wait: true
+    wait_timeout: "{{ awx_k8s_wait_timeout }}"
+
+- name: Wait for awx port to be available
+  ansible.builtin.wait_for:
+    port: "{{ awx_k8s_nodeport_port }}"
+    delay: 5
+    timeout: 120
+  when: awx_k8s_service_type == "NodePort"

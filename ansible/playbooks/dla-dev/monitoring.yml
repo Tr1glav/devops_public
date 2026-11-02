@@ -1,0 +1,12 @@
+---
+- name: Install prometheus
+  hosts: prometheus
+  become: true
+  roles:
+    - role: prometheus
+
+- name: Install grafana
+  hosts: prometheus
+  become: true
+  roles:
+    - role: grafana

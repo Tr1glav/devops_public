@@ -1,0 +1,42 @@
+---
+- name: Revoke all privileges before user removal
+  community.postgresql.postgresql_privs:
+    database: "postgres"
+    roles: "{{ item }}"
+    privs: "ALL"
+    type: database
+    state: absent
+    login_user: "postgres"
+    login_password: >-
+      {{ (postgres_vault_secrets.json.data.data.superuser_password)
+      | default('') }}
+    login_unix_socket: "/var/run/postgresql/"
+
+- name: Cleanup leftover objects
+  community.postgresql.postgresql_query:
+    query: |
+      DROP OWNED BY "{{ item }}" CASCADE;
+    login_user: "postgres"
+    login_password: >-
+      {{ (postgres_vault_secrets.json.data.data.superuser_password)
+      | default('') }}
+    login_unix_socket: "/var/run/postgresql/"
+  failed_when: false
+
+- name: Terminate active connections
+  community.postgresql.postgresql_query:
+    db: postgres
+    query: |
+      SELECT pg_terminate_backend(pid)
+      FROM pg_stat_activity
+      WHERE usename = '{{ item }}';
+
+- name: Drop PostgreSQL user
+  community.postgresql.postgresql_user:
+    name: "{{ item }}"
+    state: absent
+    login_user: "postgres"
+    login_password: >-
+      {{ (postgres_vault_secrets.json.data.data.superuser_password)
+      | default('') }}
+    login_unix_socket: "/var/run/postgresql/"

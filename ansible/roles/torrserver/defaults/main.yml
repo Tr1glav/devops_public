@@ -1,0 +1,12 @@
+---
+torrserver_install_dir: /opt/torrserver
+torrserver_port: 8090
+torrserver_ip: ""
+torrserver_user: torrserver
+torrserver_group: torrserver
+torrserver_service_name: torrserver
+torrserver_log_dir: /var/log/torrserver
+torrserver_data_dir: /opt/ts
+torrserver_httpauth: false
+torrserver_readonly: false
+torrserver_download_dir: /opt/ts/torrents

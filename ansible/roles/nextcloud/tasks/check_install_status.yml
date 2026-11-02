@@ -1,0 +1,28 @@
+---
+- name: Check if config.php exists
+  ansible.builtin.stat:
+    path: /var/www/nextcloud/config/config.php
+  register: nextcloud_config_file
+
+- name: Read existing config if exists
+  ansible.builtin.slurp:
+    src: /var/www/nextcloud/config/config.php
+  register: nextcloud_existing_config
+  when: nextcloud_config_file.stat.exists
+
+- name: Extract installation status from config
+  ansible.builtin.set_fact:
+    nextcloud_config_installed: >-
+      {{ nextcloud_existing_config.content |
+      b64decode |
+      regex_findall("'installed' => (true|false)") |
+      first | default('false') == 'true' }}
+  when: nextcloud_config_file.stat.exists
+
+- name: Determine if Nextcloud is actually installed
+  ansible.builtin.set_fact:
+    nextcloud_actually_installed: >-
+      {{
+        nextcloud_config_file.stat.exists and
+        nextcloud_config_installed | default(false)
+      }}

@@ -1,0 +1,9 @@
+---
+[Unit]
+Description=BGP health guard: withdraw announcements when tunnel is dead
+After=bird.service tunnel-client.service
+Wants=bird.service
+
+[Service]
+Type=oneshot
+ExecStart={{ bgp_announcer_guard_script }} --socks-port {{ bgp_announcer_socks_port }} --url {{ bgp_announcer_guard_probe_url }} --expect {{ bgp_announcer_guard_expect }} --protocol {{ bgp_announcer_route_protocol }} --bgp-protocol {{ bgp_announcer_protocol_name }} --fail-threshold {{ bgp_announcer_guard_fail_threshold }} --ok-threshold {{ bgp_announcer_guard_ok_threshold }} --state {{ bgp_announcer_guard_state }}

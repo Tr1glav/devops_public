@@ -1,0 +1,30 @@
+---
+- name: Create SSL directory
+  ansible.builtin.file:
+    path: "{{ awx_ssl_dir }}"
+    state: directory
+    owner: root
+    group: root
+    mode: '0750'
+
+- name: Install SSL certificate
+  ansible.builtin.copy:
+    content: "{{ _awx_ssl_certificate }}"
+    dest: "{{ awx_ssl_dir }}/{{ awx_domain }}.crt"
+    owner: root
+    group: root
+    mode: '0644'
+  when: _awx_ssl_certificate | default('') != ''
+  notify: Restart nginx
+  no_log: true
+
+- name: Install SSL private key
+  ansible.builtin.copy:
+    content: "{{ _awx_ssl_private_key }}"
+    dest: "{{ awx_ssl_dir }}/{{ awx_domain }}.key"
+    owner: root
+    group: root
+    mode: '0600'
+  when: _awx_ssl_private_key | default('') != ''
+  notify: Restart nginx
+  no_log: true

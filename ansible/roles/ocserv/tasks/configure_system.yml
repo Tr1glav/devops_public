@@ -1,0 +1,26 @@
+---
+- name: Enable IP forwarding
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: '1'
+    sysctl_set: true
+    state: present
+    reload: true
+
+- name: Configure sysctl for better VPN performance
+  ansible.posix.sysctl:
+    name: "{{ item.name }}"
+    value: "{{ item.value }}"
+    sysctl_set: true
+    state: present
+    reload: true
+  loop:
+    - {name: net.core.rmem_default, value: '87380'}
+    - {name: net.core.wmem_default, value: '87380'}
+    - {name: net.ipv4.tcp_congestion_control, value: 'bbr'}
+
+- name: Create directory for ocserv
+  ansible.builtin.file:
+    path: /etc/ocserv
+    state: directory
+    mode: '0755'

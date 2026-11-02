@@ -1,0 +1,64 @@
+---
+# BGP-экспортёр списков блокировок: BIRD2 на wh-list-1 раздаёт MikroTik'у
+# префиксы из списков с GitHub. Домашний трафик к этим префиксам приходит
+# на этот хост и уходит в туннель (TPROXY, см. роль tunnel_client).
+
+bgp_announcer_enabled: true
+
+# Установка BIRD2
+bgp_announcer_packages:
+  - bird2
+
+# BGP: private ASN по RFC 6996; локальный (этот хост) и пир (MikroTik)
+bgp_announcer_local_as: 64512
+bgp_announcer_peer_as: 64999
+bgp_announcer_router_id: "<hidden-ip>"
+bgp_announcer_peer_address: "<hidden-ip>"
+# eBGP через маршрутизатор (не напрямую линком) — TTL
+bgp_announcer_multihop: 2
+bgp_announcer_hold_time: 90
+bgp_announcer_keepalive_time: 30
+
+# Списки префиксов (по одному URL в строке sources.list).
+# AntiZapret: google/discord — точечные списки; antifilter — общий список
+# заблокированных в РФ ресурсов (можно убрать, если нужен только Google/Discord).
+bgp_announcer_sources:
+  - https://raw.githubusercontent.com/GubernievS/AntiZapret-VPN/main/setup/root/antizapret/download/google-ips.txt
+  - https://raw.githubusercontent.com/GubernievS/AntiZapret-VPN/main/setup/root/antizapret/download/discord-ips.txt
+  - https://raw.githubusercontent.com/GubernievS/AntiZapret-VPN/main/setup/root/antizapret/download/telegram-ips.txt
+  - https://antifilter.download/list/allyouneed.lst
+
+# Санитарные ограничения: слишком широкие префиксы не анонсируем,
+# при превышении лимита файл не обновляется (защита от «залива» пира)
+bgp_announcer_min_prefixlen: 8
+bgp_announcer_max_prefixes: 50000
+
+# Периодичность обновления списков
+bgp_announcer_update_interval: "1h"
+
+# Пути
+bgp_announcer_state_dir: "/etc/bgp-announcer"
+bgp_announcer_announced_file: "/etc/bird/announced.conf"
+bgp_announcer_script_path: "/usr/local/bin/bgp-lists-update.py"
+
+# Открыть 179/tcp для сетей пира (правило iptables с -C guard)
+bgp_announcer_firewall_enabled: true
+bgp_announcer_allowed_networks:
+  - <hidden-ip>/16
+  - <hidden-ip>/23
+
+# Health-guard: пока туннель мёртв (нет ответа через SOCKS Xray), протокол
+# BGP выключается — MikroTik снимает маршруты и уходит к провайдеру.
+bgp_announcer_guard_enabled: true
+bgp_announcer_guard_script: "/usr/local/bin/bgp-guard.py"
+bgp_announcer_guard_state: "/var/lib/bgp-announcer/guard.state"
+bgp_announcer_guard_interval: "30s"
+bgp_announcer_guard_probe_url: "https://www.gstatic.com/generate_204"
+bgp_announcer_guard_expect: 204
+bgp_announcer_guard_fail_threshold: 3
+bgp_announcer_guard_ok_threshold: 5
+bgp_announcer_socks_port: 10808
+bgp_announcer_protocol_name: "mikrotik"
+# Guard гасит НЕ BGP-сессию, а протокол с анонсами: сессия остаётся
+# Established, уходят только маршруты (соседи не видят flap).
+bgp_announcer_route_protocol: "static_announced"

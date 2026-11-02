@@ -1,0 +1,9 @@
+---
+- name: Restart prometheus
+  ansible.builtin.service:
+    name: prometheus
+    state: restarted
+- name: Restart node_exporter
+  ansible.builtin.systemd:
+    name: node_exporter
+    state: restarted

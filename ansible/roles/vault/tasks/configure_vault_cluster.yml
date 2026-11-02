@@ -1,0 +1,101 @@
+---
+- name: Read unseal keys from file (on leader)
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      grep -A{{ vault_keyshares }} 'Unseal Keys:' /root/vault_init_keys.txt | \
+      tail -{{ vault_keyshares }} | \
+      awk '{print $3}'
+  register: vault_read_unseal_keys
+  when:
+    - inventory_hostname == groups['vault'] | first
+    - vault_keys_file.stat.exists
+  changed_when: false
+  no_log: true
+
+- name: Read root token from file (on leader)
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      grep 'Initial Root Token:' /root/vault_init_keys.txt | awk '{print $4}'
+  register: vault_read_root_token
+  when:
+    - inventory_hostname == groups['vault'] | first
+    - vault_keys_file.stat.exists
+  changed_when: false
+  no_log: true
+
+- name: Set facts on leader
+  ansible.builtin.set_fact:
+    vault_unseal_keys: "{{ vault_read_unseal_keys.stdout_lines }}"
+    vault_root_token: "{{ vault_read_root_token.stdout }}"
+  when:
+    - inventory_hostname == groups['vault'] | first
+    - vault_read_unseal_keys.stdout_lines|length == vault_keyshares
+    - vault_read_root_token.stdout != ""
+  no_log: true
+
+- name: Distribute keys to all nodes
+  ansible.builtin.set_fact:
+    vault_unseal_keys: >-
+      {{ hostvars[groups['vault'] |
+      first]['vault_unseal_keys'] }}
+    vault_root_token: >-
+      {{ hostvars[groups['vault'] |
+      first]['vault_root_token'] }}
+  when:
+    - inventory_hostname != groups['vault'] | first
+    - hostvars[groups['vault'] | first]['vault_unseal_keys'] is defined
+    - hostvars[groups['vault'] | first]['vault_root_token'] is defined
+  no_log: true
+
+- name: Wait for leader readiness
+  ansible.builtin.wait_for:
+    host: "{{ hostvars[groups['vault'] |
+      first]['ansible_host'] }}"
+    port: 8200
+    timeout: 300
+  when: inventory_hostname != groups['vault'] | first
+
+- name: Check TLS settings
+  ansible.builtin.shell:
+    cmd: |
+      grep -q "tls_disable = true" \
+        {{ vault_config_dir }}/vault.hcl && echo "true" || echo "false"
+  register: __vault_tls_config_check
+  changed_when: false
+
+- name: Display TLS status
+  ansible.builtin.debug:
+    msg: "TLS отключен: {{ __vault_tls_config_check.stdout == 'true' }}"
+
+- name: Unseal leader (if needed)
+  ansible.builtin.command:
+    cmd: "vault operator unseal {{ item }}"
+  environment:
+    VAULT_ADDR: >-
+      http://{{ hostvars[groups['vault'] |
+      first]['ansible_host'] }}:8200
+  loop: "{{ vault_unseal_keys[0:vault_keythreshold] }}"
+  when:
+    - inventory_hostname == groups['vault'] | first
+    - vault_unseal_keys|length >= vault_keythreshold
+  register: _vault_leader_unseal
+  changed_when: "'Vault is already unsealed' not in _vault_leader_unseal.stderr"
+  no_log: true
+
+- name: Join Raft cluster
+  ansible.builtin.command:
+    cmd: |
+      vault operator raft join \
+        http://{{ hostvars[groups['vault'] | first]['ansible_host'] }}:8200
+  environment:
+    VAULT_ADDR: "{{ vault_api_addr }}"
+  register: __vault_join_result
+  when: inventory_hostname != groups['vault'] | first
+  retries: 5
+  delay: 10
+  until: __vault_join_result.rc == 0
+  failed_when: false
+  changed_when: false
+  no_log: true

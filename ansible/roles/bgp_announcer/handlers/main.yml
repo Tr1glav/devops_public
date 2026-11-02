@@ -1,0 +1,9 @@
+---
+- name: Reload bird
+  ansible.builtin.systemd:
+    name: bird
+    state: reloaded
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true

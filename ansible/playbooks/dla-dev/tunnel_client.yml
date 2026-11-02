@@ -1,0 +1,6 @@
+---
+- name: Install tunnel_client
+  hosts: wh-list
+  become: true
+  roles:
+    - role: tunnel_client

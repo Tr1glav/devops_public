@@ -1,0 +1,70 @@
+#!/bin/bash
+# OpenConnect VPN Connection Script
+# Interface: {{ openconnect_client_interface }}
+
+SERVER="{{ openconnect_client_server }}"
+USERNAME="{{ _openconnect_client_credentials.username }}"
+INTERFACE="{{ openconnect_client_interface }}"
+MTU="{{ openconnect_client_mtu }}"
+PID_FILE="/run/openconnect.${INTERFACE}.pid"
+
+# Локальная сеть, которую нужно исключить
+LOCAL_NETWORK="{{ openconnect_client_internal_network }}"
+LOCAL_INTERFACE="{{ openconnect_client_internal_interface }}"
+
+# Чтение пароля из файла
+if [ -f /etc/openconnect/credentials.conf ]; then
+    source /etc/openconnect/credentials.conf
+fi
+
+# Определяем путь к vpnc-script
+VPNC_SCRIPT="{{ openconnect_client_vpnc_script }}"
+if [ ! -f "${VPNC_SCRIPT}" ]; then
+    if [ -f /etc/vpnc/vpnc-script ]; then
+        VPNC_SCRIPT="/etc/vpnc/vpnc-script"
+    elif [ -f /usr/share/vpnc-scripts/vpnc-script ]; then
+        VPNC_SCRIPT="/usr/share/vpnc-scripts/vpnc-script"
+    else
+        VPNC_SCRIPT=""
+    fi
+fi
+
+# Очистка старого интерфейса
+if ip link show ${INTERFACE} >/dev/null 2>&1; then
+    echo "Removing existing interface ${INTERFACE}"
+    ip link delete ${INTERFACE} 2>/dev/null || true
+    sleep 1
+fi
+
+# Базовые параметры
+OPTS="--interface ${INTERFACE}"
+OPTS="${OPTS} --user ${USERNAME}"
+OPTS="${OPTS} --mtu ${MTU}"
+OPTS="${OPTS} --reconnect-timeout {{ openconnect_client_reconnect_timeout }}"
+
+# Используем стандартный скрипт
+if [ -n "${VPNC_SCRIPT}" ] && [ -f "${VPNC_SCRIPT}" ]; then
+    OPTS="${OPTS} --script ${VPNC_SCRIPT}"
+else
+    OPTS="${OPTS} --script-tun"
+fi
+
+# Отключение IPv6
+{% if openconnect_client_disable_ipv6 | default(true) %}
+OPTS="${OPTS} --disable-ipv6"
+{% endif %}
+
+# Дополнительные параметры
+OPTS="${OPTS} {{ openconnect_client_extra_opts | default('') }}"
+
+# Фоновый режим
+{% if openconnect_client_background | default(true)  %}
+OPTS="${OPTS} --background --pid-file ${PID_FILE}"
+{% endif  %}
+
+# Запуск OpenConnect
+if [ -n "${VPN_PASSWORD}" ]; then
+    echo "${VPN_PASSWORD}" | /usr/sbin/openconnect ${OPTS} ${SERVER} --passwd-on-stdin
+else
+    /usr/sbin/openconnect ${OPTS} ${SERVER}
+fi

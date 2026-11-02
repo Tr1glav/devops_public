@@ -1,0 +1,151 @@
+---
+- name: Update apt cache
+  ansible.builtin.apt:
+    update_cache: true
+  changed_when: false
+
+- name: Install dependencies
+  ansible.builtin.package:
+    name:
+      - wget
+      - tar
+    state: present
+
+- name: Create jackett system group
+  ansible.builtin.group:
+    name: "{{ jackett_group }}"
+    system: true
+    state: present
+
+- name: Create jackett system user
+  ansible.builtin.user:
+    name: "{{ jackett_user }}"
+    group: "{{ jackett_group }}"
+    system: true
+    home: "{{ jackett_install_dir }}"
+    create_home: false
+    shell: /sbin/nologin
+    state: present
+
+- name: Create install directory
+  ansible.builtin.file:
+    path: "{{ jackett_install_dir }}"
+    state: directory
+    owner: "{{ jackett_user }}"
+    group: "{{ jackett_group }}"
+    mode: '0755'
+
+- name: Check if jackett is already installed
+  ansible.builtin.stat:
+    path: "{{ jackett_install_dir }}/jackett"
+  register: jackett_installed
+
+- name: Download Jackett
+  ansible.builtin.get_url:
+    url: "https://github.com/Jackett/Jackett/releases/latest/download/\
+Jackett.Binaries.{{ jackett_arch }}.tar.gz"
+    dest: "/tmp/jackett.tar.gz"
+    mode: '0644'
+    timeout: 600
+  register: jackett_download_result
+  retries: 5
+  delay: 30
+  until: jackett_download_result is succeeded
+  when: not jackett_installed.stat.exists
+
+- name: Extract Jackett
+  ansible.builtin.unarchive:
+    src: "/tmp/jackett.tar.gz"
+    dest: /opt/
+    remote_src: true
+  when: not jackett_installed.stat.exists
+
+- name: Move Jackett contents
+  ansible.builtin.shell:
+    cmd: |
+      for d in /opt/Jackett* /opt/Jackett-v*; do
+        if [ -d "$d" ]; then
+          cp -r "$d"/* {{ jackett_install_dir }}/
+          rm -rf "$d"
+          break
+        fi
+      done
+  args:
+    creates: "{{ jackett_install_dir }}/jackett"
+  when: not jackett_installed.stat.exists
+
+- name: Remove downloaded archive
+  ansible.builtin.file:
+    path: /tmp/jackett.tar.gz
+    state: absent
+
+- name: Set ownership
+  ansible.builtin.file:
+    path: "{{ jackett_install_dir }}"
+    owner: "{{ jackett_user }}"
+    group: "{{ jackett_group }}"
+    recurse: true
+    mode: '0755'
+
+- name: Create log directory
+  ansible.builtin.file:
+    path: "{{ jackett_log_dir }}"
+    state: directory
+    owner: "{{ jackett_user }}"
+    group: "{{ jackett_group }}"
+    mode: '0755'
+
+- name: Move Jackett from Jackett to jackett lowercase
+  ansible.builtin.shell:
+    cmd: |
+      if [ -d /opt/Jackett ] && [ ! -f /opt/jackett ]; then
+        cp -r /opt/Jackett/* /opt/jackett/
+        rm -rf /opt/Jackett
+      fi
+    creates: "{{ jackett_install_dir }}/jackett"
+
+- name: Check install script exists
+  ansible.builtin.stat:
+    path: "{{ jackett_install_dir }}/install_service_systemd.sh"
+  register: jackett_install_script
+
+- name: Run install script
+  ansible.builtin.command:
+    cmd: "bash {{ jackett_install_dir }}/install_service_systemd.sh"
+    creates: /etc/systemd/system/jackett.service
+  become: true
+  become_user: root
+  when: jackett_install_script.stat.exists
+
+- name: Create systemd service manually
+  ansible.builtin.copy:
+    dest: /etc/systemd/system/jackett.service
+    content: |
+      [Unit]
+      Description=Jackett API
+      After=network.target
+
+      [Service]
+      Type=simple
+      User={{ jackett_user }}
+      Group={{ jackett_group }}
+      Environment="PORT={{ jackett_port }}"
+      ExecStart={{ jackett_install_dir }}/jackett \
+        --Port {{ jackett_port }} --ListenAddr <hidden-ip> \
+        --LogFile {{ jackett_log_dir }}/log.txt \
+        --PidFile {{ jackett_install_dir }}/jackett.pid
+      Restart=always
+      RestartSec=10
+
+      [Install]
+      WantedBy=multi-user.target
+    mode: '0644'
+  become: true
+  when: not jackett_install_script.stat.exists
+
+- name: Start and enable jackett service
+  ansible.builtin.systemd:
+    name: "{{ jackett_service_name }}"
+    enabled: true
+    state: started
+    daemon_reload: true

@@ -1,0 +1,11 @@
+---
+[Unit]
+Description=Periodic tunnel health check for BGP announcements
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec={{ bgp_announcer_guard_interval }}
+Unit=bgp-guard.service
+
+[Install]
+WantedBy=timers.target

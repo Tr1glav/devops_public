@@ -1,0 +1,19 @@
+---
+meshcore_service_name: meshcore
+meshcore_user: meshcore
+meshcore_group: meshcore
+meshcore_home: /opt/meshcore
+meshcore_host: <hidden-ip>
+meshcore_port: 5000
+meshcore_channel: 1
+meshcore_max_channels: 8
+meshcore_auto_reconnect: true
+meshcore_python_package: meshcore
+meshcore_python_version: python3
+meshcore_venv_path: "{{ meshcore_home }}/venv"
+meshcore_hass_token: ""
+meshcore_hass_timeout: 10
+meshcore_debug: false
+
+meshcore_vault_mount: "apps"
+meshcore_vault_path: "home/homeassistans/webhooks"

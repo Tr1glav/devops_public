@@ -1,0 +1,20 @@
+[Unit]
+Description=Prometheus
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+User={{ prometheus_user }}
+Group={{ prometheus_group }}
+Type=simple
+ExecStart={{ prometheus_dir }}/prometheus \
+    --config.file={{ prometheus_config_dir }}/prometheus.yml \
+    --storage.tsdb.path={{ prometheus_dir }}/data \
+    --web.console.templates={{ prometheus_dir }}/consoles \
+    --web.console.libraries={{ prometheus_dir }}/console_libraries
+
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

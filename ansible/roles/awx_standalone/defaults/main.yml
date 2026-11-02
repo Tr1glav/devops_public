@@ -1,0 +1,80 @@
+---
+awx_version: "24.6.1"
+awx_user: "awx"
+awx_group: "awx"
+awx_domain: "awx.{{ domain }}"
+
+awx_install_dir: "/opt/awx"
+awx_source_dir: "{{ awx_install_dir }}/source"
+awx_venv_dir: "{{ awx_install_dir }}/venv"
+awx_config_dir: "/etc/tower"
+awx_data_dir: "/var/lib/awx"
+awx_projects_dir: "{{ awx_data_dir }}/projects"
+awx_log_dir: "/var/log/tower"
+
+awx_python: "python3"
+
+awx_secret_key: ""
+awx_secret_key_len: 64
+
+awx_admin_user: "admin"
+awx_admin_password: ""
+awx_admin_password_len: 32
+awx_admin_email: "awx@{{ domain }}"
+
+awx_vault_mount: "infra"
+awx_vault_path: "{{ env }}/awx"
+
+awx_db_name: "awx"
+awx_db_user: "awx"
+awx_db_host: "localhost"
+awx_db_port: 5432
+awx_db_password: ""
+awx_db_sslmode: "prefer"
+awx_db_encoding: "UTF-8"
+awx_db_lc_collate: "C.UTF-8"
+awx_db_lc_ctype: "C.UTF-8"
+
+awx_redis_host: "localhost"
+awx_redis_port: 6379
+awx_redis_socket: "/var/run/redis/redis-server.sock"
+
+awx_uwsgi_port: 8052
+awx_uwsgi_processes: 4
+awx_daphne_port: 8051
+awx_listen_port: 80
+awx_ssl_port: 443
+
+awx_enable_ssl: true
+awx_certs_vault_mount: "certs"
+awx_certs_vault_path: "{{ env }}/{{ awx_domain }}"
+awx_ssl_dir: "/etc/nginx/ssl"
+
+# AWX разворачивается в LXC, контейнерный рантайм не ставим.
+# Без него работают веб, API и БД, но джобы и обновления проектов
+# запускаться не будут - им нужен execution environment
+awx_install_podman: false
+awx_default_ee_image: "quay.io/ansible/awx-ee:latest"
+
+awx_node_type: "hybrid"
+awx_queue_name: "default"
+
+awx_receptor_version: "1.5.6"
+awx_receptor_port: 27199
+awx_receptor_url: >-
+  https://github.com/ansible/receptor/releases/download/v{{
+  awx_receptor_version }}/receptor_{{
+  awx_receptor_version }}_linux_amd64.tar.gz
+
+awx_services:
+  - awx-uwsgi
+  - awx-daphne
+  - awx-wsrelay
+  - awx-dispatcher
+  - awx-callback-receiver
+  - awx-receptor
+
+awx_csrf_trusted_origins:
+  - "https://{{ awx_domain }}"
+
+awx_extra_settings: {}

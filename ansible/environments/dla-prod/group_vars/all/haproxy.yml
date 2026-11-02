@@ -1,0 +1,4 @@
+---
+haproxy_vip_address: "<hidden-ip>/24"
+haproxy_vip_interface: "enp3s0"
+haproxy_backends:

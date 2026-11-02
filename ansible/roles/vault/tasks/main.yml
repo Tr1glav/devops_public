@@ -1,0 +1,49 @@
+---
+- name: Install requirements
+  ansible.builtin.import_tasks: install_requirements.yml
+  tags:
+    - vault
+
+- name: Configure user
+  ansible.builtin.import_tasks: configure_user.yml
+  tags:
+    - vault
+
+- name: Install vault
+  ansible.builtin.import_tasks: install_vault.yml
+  tags:
+    - vault
+
+- name: Configure vault
+  ansible.builtin.import_tasks: configure_vault.yml
+  tags:
+    - vault
+    - vault_unseal
+
+- name: Init vault
+  ansible.builtin.import_tasks: init_vault.yml
+  tags:
+    - vault
+    - vault_unseal
+
+- name: Configure vault cluster
+  ansible.builtin.import_tasks: configure_vault_cluster.yml
+  tags:
+    - vault
+    - vault_unseal
+
+- name: Unseal vault
+  ansible.builtin.import_tasks: unseal_vault.yml
+  tags:
+    - vault
+    - vault_unseal
+
+- name: Check vault status
+  ansible.builtin.import_tasks: check_vault_status.yml
+  tags:
+    - vault
+
+- name: Auto unseal vault
+  ansible.builtin.import_tasks: auto_unseal_vault.yml
+  tags:
+    - vault

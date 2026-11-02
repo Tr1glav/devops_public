@@ -1,0 +1,7 @@
+---
+- name: Install haproxy
+  hosts: haproxy
+  serial: 1
+  become: true
+  roles:
+    - role: haproxy

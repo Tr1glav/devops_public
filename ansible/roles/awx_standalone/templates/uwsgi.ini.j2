@@ -1,0 +1,14 @@
+[uwsgi]
+http = 127.0.0.1:{{ awx_uwsgi_port }}
+module = awx.wsgi:application
+chdir = {{ awx_source_dir }}
+virtualenv = {{ awx_venv_dir }}
+processes = {{ awx_uwsgi_processes }}
+threads = 2
+master = true
+vacuum = true
+lazy-apps = true
+no-orphans = true
+harakiri = 120
+buffer-size = 32768
+static-map = /static={{ awx_data_dir }}/public/static

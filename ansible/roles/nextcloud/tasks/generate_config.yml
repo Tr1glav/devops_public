@@ -1,0 +1,8 @@
+---
+- name: Generate config.php with all required settings
+  ansible.builtin.template:
+    src: config.php.j2
+    dest: /var/www/nextcloud/config/config.php
+    owner: www-data
+    group: www-data
+    mode: '0640'

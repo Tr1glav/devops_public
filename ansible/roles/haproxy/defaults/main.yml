@@ -1,0 +1,5 @@
+---
+haproxy_ssl_dir: "/etc/haproxy/certs"
+haproxy_config: "/etc/haproxy/haproxy.cfg"
+haproxy_vault_mount: "infra"
+haproxy_vault_path: "{{ env }}/haproxy"

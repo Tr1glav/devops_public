@@ -1,0 +1,32 @@
+---
+- name: Check if virtualenv exists
+  ansible.builtin.stat:
+    path: "{{ venv_path }}/bin/activate"
+  register: postgres_venv_stat
+  changed_when: false
+  tags: [python, virtualenv]
+
+- name: Ensure virtualenv directory exists
+  ansible.builtin.file:
+    path: "{{ venv_path }}"
+    state: directory
+    owner: "{{ patroni_user }}"
+    group: "{{ patroni_group }}"
+    mode: '0755'
+  when: not postgres_venv_stat.stat.exists
+  tags: [python, virtualenv]
+
+- name: Create Python virtual environment
+  ansible.builtin.command: "python3 -m venv {{ venv_path }}"
+  args:
+    creates: "{{ venv_path }}/bin/activate"
+  when: not postgres_venv_stat.stat.exists
+  changed_when: false
+  tags: [python, virtualenv]
+
+- name: Upgrade pip in virtual environment
+  ansible.builtin.pip:
+    name: pip
+    virtualenv: "{{ venv_path }}"
+    state: present
+  tags: [python, packages]

@@ -1,0 +1,48 @@
+<VirtualHost *:80>
+    ServerName {{ redmine_domain }}
+    ServerAdmin webmaster@{{ redmine_domain }}
+
+    DocumentRoot {{ redmine_install_dir }}/public
+
+    <Directory {{ redmine_install_dir }}/public>
+        Options -Indexes +FollowSymLinks
+        AllowOverride All
+        Require all granted
+
+        <IfModule mod_rewrite.c>
+            RewriteEngine On
+            RewriteCond %{REQUEST_FILENAME} !-f
+            RewriteRule ^(.*)$ dispatch.fcgi [QSA,L]
+        </IfModule>
+    </Directory>
+
+    <IfModule mod_fcgid.c>
+        FcgidInitialEnv RAILS_ENV production
+        FcgidInitialEnv RUBYOPT gem list
+        FcgidIOTimeout 240
+        FcgidConnectTimeout 32
+        FcgidMaxRequestLen 10485760
+        FcgidMaxProcesses 150
+        FcgidMaxRequestInMem 4096
+    </IfModule>
+
+    <IfModule mod_passenger.c>
+        PassengerAppEnv production
+        PassengerAppRoot {{ redmine_install_dir }}
+        PassengerRuby /usr/bin/ruby
+        PassengerMinInstances 1
+        PassengerMaxPoolSize 10
+        PassengerPoolIdleTime 3600
+        PassengerStatThrottleRate 10
+        PassengerSpawnMethod smart
+        RailsAppSpawnerIdleTime 86400
+        RailsFrameworkSpawnerIdleTime 0
+    </IfModule>
+
+    ErrorLog ${APACHE_LOG_DIR}/redmine-error.log
+    CustomLog ${APACHE_LOG_DIR}/redmine-access.log combined
+
+    <Location /sys>
+        Require local
+    </Location>
+</VirtualHost>

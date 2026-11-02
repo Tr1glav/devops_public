@@ -1,0 +1,15 @@
+---
+- name: Install haproxy
+  ansible.builtin.import_tasks: install_requirements.yml
+
+- name: Get secrets
+  ansible.builtin.import_tasks: get_secrets.yml
+
+- name: Configure keepelived
+  ansible.builtin.import_tasks: configure_keepelived.yml
+
+- name: Get certs
+  ansible.builtin.import_tasks: get_certs.yml
+
+- name: Configure haproxy
+  ansible.builtin.import_tasks: configure_haproxy.yml

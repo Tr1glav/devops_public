@@ -1,0 +1,27 @@
+# defaults/main.yml
+---
+ocserv_hostname: "vpn.{{ domain }}"
+
+ocserv_vault_mount: "infra"
+ocserv_vault_path: "prod/vpn/users"
+ocserv_certs_vault_mount: "certs"
+ocserv_certs_vault_path: "{{ env }}/{{ ocserv_hostname }}"
+
+# Параметры сети
+ocserv_port: 443
+ocserv_proto: tcp  # tcp или udp (лучше оба, но в конфиге часто ставят tcp)
+ocserv_ip_range: "<hidden-ip>/24"
+ocserv_netmask: "<hidden-ip>"
+
+ocserv_auth_method: "plain[passwd=/etc/ocserv/ocpasswd]"
+
+ocserv_use_self_signed: false
+ocserv_cert_path: "/etc/ocserv/server-cert.pem"
+ocserv_key_path: "/etc/ocserv/server-key.pem"
+ocserv_ca_path: "/etc/ocserv/ca.pem"
+
+ocserv_packages:
+  - ocserv
+  - gnutls-bin
+  - iptables-persistent
+  - expect

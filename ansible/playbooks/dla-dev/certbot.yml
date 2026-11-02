@@ -1,0 +1,7 @@
+---
+- name: Install certbot
+  hosts: certbot
+  become: true
+  gather_facts: false
+  roles:
+    - role: certbot

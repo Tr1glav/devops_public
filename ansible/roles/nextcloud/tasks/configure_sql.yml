@@ -1,0 +1,60 @@
+---
+- name: Start and enable MySQL service
+  ansible.builtin.systemd:
+    name: mysql
+    state: started
+    enabled: true
+
+- name: Wait for MySQL to start
+  ansible.builtin.wait_for:
+    path: /var/run/mysqld/mysqld.sock
+    state: started
+    timeout: 30
+
+- name: Secure MySQL - set root password
+  ansible.mysql.mysql_user:
+    name: root
+    host: localhost
+    password: "{{ nextcloud_db_root_password }}"
+    login_unix_socket: /var/run/mysqld/mysqld.sock
+    login_user: root
+    login_password: "{{ nextcloud_db_root_password }}"
+    check_implicit_admin: true
+
+- name: Secure MySQL - remove anonymous users
+  ansible.mysql.mysql_user:
+    name: ''
+    host: localhost
+    state: absent
+    login_user: root
+    login_password: "{{ nextcloud_db_root_password }}"
+
+- name: Secure MySQL - remove test database
+  ansible.mysql.mysql_db:
+    name: test
+    state: absent
+    login_user: root
+    login_password: "{{ nextcloud_db_root_password }}"
+
+- name: Secure MySQL - reload privileges
+  ansible.mysql.mysql_query:
+    query: "FLUSH PRIVILEGES"
+    login_user: root
+    login_password: "{{ nextcloud_db_root_password }}"
+
+- name: Create Nextcloud database
+  ansible.mysql.mysql_db:
+    name: "{{ nextcloud_db_name }}"
+    state: present
+    login_user: root
+    login_password: "{{ nextcloud_db_root_password }}"
+
+- name: Create Nextcloud database user
+  ansible.mysql.mysql_user:
+    name: "{{ nextcloud_db_user }}"
+    password: "{{ nextcloud_db_password }}"
+    priv: "{{ nextcloud_db_name }}.*:ALL"
+    host: localhost
+    state: present
+    login_user: root
+    login_password: "{{ nextcloud_db_root_password }}"

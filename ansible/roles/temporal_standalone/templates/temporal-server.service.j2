@@ -1,0 +1,27 @@
+[Unit]
+Description=Temporal Server (SQLite)
+After=network.target
+
+[Service]
+Type=simple
+User={{ temporal_user }}
+Group={{ temporal_group }}
+WorkingDirectory={{ data_dir }}
+ExecStart={{ bin_dir }}/temporal server start-dev \
+  --db-filename {{ db_file }} \
+  --port 7233 \
+  --ui-port 8233 \
+  --ip 0.0.0.0
+Restart=always
+RestartSec=10
+
+# Security hardening
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ReadWritePaths={{ data_dir }}
+ProtectHome=yes
+ProtectProc=invisible
+
+[Install]
+WantedBy=multi-user.target

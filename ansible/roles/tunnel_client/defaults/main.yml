@@ -1,0 +1,59 @@
+---
+# Xray-core (главное ядро Tunnel)
+tunnel_client_xray_version: "26.10.21"
+tunnel_client_xray_url: "https://github.com/XTLS/Xray-core/releases/download/v{{ tunnel_client_xray_version }}/Xray-linux-64.zip"
+tunnel_client_install_dir: "/opt/tunnel-client"
+
+# Локальные прокси-порты
+tunnel_client_socks_port: 10808
+tunnel_client_http_port: 10809
+
+# Прозрачный транзит (TPROXY): трафик с других хостов, идущий через этот
+# хост, уходит сквозь активный туннель. ip_forward + iptables TPROXY +
+# dokodemo-door inbound в Xray на tproxy_port.
+tunnel_client_tproxy_enabled: true
+tunnel_client_tproxy_port: 10810
+# Сети-источники транзитного трафика (маркируются и уходят в туннель)
+tunnel_client_transit_sources:
+  - <hidden-ip>/16
+  - <hidden-ip>/23
+# Порты назначения, которые НЕ уходят в туннель (RETURN до TPROXY).
+# Обязательно для 22: при остановке Xray (check-фаза best --proxy)
+# административный SSH не должен уходить в TPROXY — иначе чёрная дыра
+# и хост недоступен для управления.
+tunnel_client_tproxy_bypass_ports:
+  - 22
+  # BGP от MikroTik (<hidden-ip>) — сессия должна идти напрямую, иначе SYN
+  # уходит в Xray, проксируется в туннель и возвращается петлёй.
+  - 179
+
+# Файл кредков (LOGIN=/PASSWORD=), читается скриптом через TUNNEL_CREDS
+tunnel_client_creds_file: "/etc/tunnel-client/creds"
+
+# Фолбэк-креды, если их нет в Vault
+tunnel_client_login: ""
+tunnel_client_password: ""
+
+# Vault: секреты в infra/data/dev/wh-list {login, password}
+tunnel_client_use_vault: true
+tunnel_client_vault_mount: "infra"
+tunnel_client_vault_path: "dev/wh-list"
+
+# Пакеты
+tunnel_client_packages:
+  - curl
+  - unzip
+
+# Резолвер для бустрапа туннеля. На роутере <hidden-ip> и <hidden-ip> специально
+# завёрнуты в туннель (провайдер подменяет DNS), поэтому при лежащем туннеле
+# они недоступны — получается замкнутый круг: без DNS клиент не поднимется.
+# <hidden-ip> не маршрутизируется в туннель и доступен всегда.
+tunnel_client_bootstrap_dns:
+  - <hidden-ip>
+  - <hidden-ip>
+
+# systemd-сервис
+tunnel_client_service_enabled: true
+tunnel_client_service_state: started
+# best --proxy = fetch + check + run (самовосстановление при старте)
+tunnel_client_service_cmd: "best --proxy"

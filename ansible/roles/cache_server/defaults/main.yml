@@ -1,0 +1,109 @@
+---
+# Основные настройки
+nginx_github_cache_port: 80
+nginx_github_cache_server_name: "_"
+
+# Настройки кэша
+nginx_github_cache_path: "/var/cache/nginx/github"
+nginx_github_cache_keys_zone_size: "100m"
+nginx_github_cache_max_size: "50g"
+nginx_github_cache_inactive: "90d"
+nginx_github_cache_valid_codes: "200 301 302 304"
+nginx_github_cache_valid_time: "10m"
+
+# Настройки для ассетов (файлы для скачивания)
+nginx_github_assets_cache_keys_zone_size: "500m"
+nginx_github_assets_cache_max_size: "50g"
+nginx_github_assets_cache_inactive: "90d"
+
+# Настройки прокси
+nginx_github_api_upstream: "https://api.github.com"
+nginx_github_raw_upstream: "https://raw.githubusercontent.com"
+
+# Дополнительные настройки кэширования
+nginx_github_cache_use_stale: >-
+  error timeout http_500 http_502 http_503
+  http_504
+nginx_github_cache_background_update: "on"
+nginx_github_cache_lock: "on"
+nginx_github_cache_lock_timeout: "5s"
+
+# SSL настройки
+nginx_github_cache_ssl_server_name: github-cache.{{ product_env }}.{{ domain }}
+nginx_github_cache_ssl_enabled: true
+nginx_github_cache_ssl_cert: "/etc/ssl/certs/github-cache.crt"
+nginx_github_cache_ssl_key: "/etc/ssl/private/github-cache.key"
+nginx_github_cache_ssl_combined: "/etc/ssl/certs/github-cache-combined.pem"
+
+# Настройки rate limiting (опционально)
+nginx_github_rate_limit_enabled: false
+nginx_github_rate_limit_zone: "github_limit"
+nginx_github_rate_limit_rate: "10r/s"
+nginx_github_rate_limit_burst: 20
+nginx_github_rate_limit_delay: 5
+
+nginx_ghrc_cache_port: 8080
+nginx_ghrc_cache_server_name: github-cache.{{ product_env }}.{{ domain }}
+nginx_ghrc_cache_path: "/var/cache/nginx/ghrc"
+
+nginx_ghrc_cache_keys_zone_size: "100m"
+nginx_ghrc_cache_max_size: "50g"
+nginx_ghrc_cache_inactive: "30d"
+
+nginx_ghrc_releases_cache_keys_zone_size: "500m"
+nginx_ghrc_releases_cache_max_size: "100g"
+nginx_ghrc_releases_cache_inactive: "90d"
+
+# Cache behavior
+nginx_ghrc_cache_valid_codes: "200 301 302"
+nginx_ghrc_cache_valid_time: "24h"
+nginx_ghrc_cache_use_stale: >-
+  error timeout updating http_500 http_502
+  http_503 http_504
+nginx_ghrc_cache_background_update: "on"
+nginx_ghrc_cache_lock: "on"
+nginx_ghrc_cache_lock_timeout: "5s"
+
+# Rate limiting
+nginx_ghrc_rate_limit_enabled: false
+nginx_ghrc_rate_limit_zone: "ghrc_limit"
+nginx_ghrc_rate_limit_rate: "10r/s"
+nginx_ghrc_rate_limit_burst: "20"
+
+# SSL configuration (optional)
+nginx_ghrc_cache_ssl_enabled: true
+nginx_ghrc_cache_ssl_cert: "/etc/ssl/certs/ghrc-cache.crt"
+nginx_ghrc_cache_ssl_key: "/etc/ssl/private/ghrc-cache.key"
+
+# Additional settings
+nginx_ghrc_resolver: "<hidden-ip> <hidden-ip>"
+nginx_ghrc_resolver_timeout: "5s"
+nginx_ghrc_client_max_body_size: "100m"
+
+# Proxy timeouts
+nginx_ghrc_proxy_connect_timeout: "30s"
+nginx_ghrc_proxy_send_timeout: "60s"
+nginx_ghrc_proxy_read_timeout: "60s"
+
+# Buffer settings
+nginx_ghrc_proxy_buffers: "8 32k"
+nginx_ghrc_proxy_buffer_size: "32k"
+nginx_ghrc_proxy_busy_buffers_size: "64k"
+nginx_ghrc_proxy_temp_file_write_size: "64k"
+
+# Large file buffer settings
+nginx_ghrc_large_proxy_buffers: "16 512k"
+nginx_ghrc_large_proxy_buffer_size: "512k"
+nginx_ghrc_large_proxy_busy_buffers_size: "512k"
+nginx_ghrc_large_proxy_temp_file_write_size: "512k"
+
+# Large file timeouts
+nginx_ghrc_large_proxy_connect_timeout: "60s"
+nginx_ghrc_large_proxy_send_timeout: "300s"
+nginx_ghrc_large_proxy_read_timeout: "300s"
+
+# Системные настройки
+nginx_user: "www-data"
+nginx_group: "www-data"
+nginx_worker_processes: "auto"
+nginx_worker_connections: 1024

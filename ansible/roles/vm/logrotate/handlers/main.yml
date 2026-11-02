@@ -1,0 +1,13 @@
+---
+- name: Restart rsyslog
+  ansible.builtin.service:
+    name: rsyslog
+    state: restarted
+  when: ansible_service_mgr == 'systemd'
+
+- name: Force logrotate
+  ansible.builtin.command:
+    cmd: logrotate -f {{ logrotate_main_config }}
+  changed_when: false
+  register: logrotate_force_result
+  failed_when: false

@@ -1,0 +1,20 @@
+---
+- name: Create etcd system user
+  ansible.builtin.user:
+    name: etcd
+    shell: /usr/sbin/nologin
+    system: true
+    home: /var/lib/etcd
+    create_home: true
+
+- name: Create etcd directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: etcd
+    group: etcd
+    mode: "0750"
+  loop:
+    - /var/lib/etcd
+    - /etc/etcd
+    - /var/log/etcd

@@ -1,0 +1,9 @@
+---
+apiVersion: projectcalico.org/v3
+kind: IPPool
+metadata:
+  name: default-pool
+spec:
+  cidr: <hidden-ip>/8
+  natOutgoing: true  # Включить NAT для исходящего трафика
+  disabled: false

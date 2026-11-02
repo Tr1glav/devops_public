@@ -1,0 +1,115 @@
+---
+# Версия Nextcloud для слабого сервера (33.0.0 - тяжелая, рассмотрите 28/29)
+nextcloud_version: "33.0.0"
+nextcloud_domain: "box.{{ domain }}"
+nextcloud_admin_user: "admin"
+nextcloud_data_dir: "/var/www/nextcloud/data"
+nextcloud_install_dir: "/var/www/nextcloud"
+nextcloud_db_name: "nextcloud"
+nextcloud_db_user: "nextcloud"
+nextcloud_db_host: "localhost"
+
+# 📌 1. PHP ВЕРСИЯ - обязательно 8.2 или 8.3 (8.1 уже EOL)
+nextcloud_php_version: "8.2"
+
+# Vault (без изменений)
+nextcloud_vault_mount: "infra"
+nextcloud_vault_path: "{{ env }}/nextcloud"
+
+# S3 - без изменений
+nextcloud_s3_endpoint: "s3.cloud.ru"
+nextcloud_s3_bucket: "nextcloud"
+nextcloud_s3_bucket_preview: "nextcloud-preview"
+nextcloud_s3_region: "ru-central-1"
+nextcloud_s3_vault_mount: "infra"
+nextcloud_s3_vault_path: "{{ env }}/s3_secrets"
+
+# SSL
+nextcloud_certs_vault_mount: "certs"
+nextcloud_certs_vault_path: "{{ env }}/{{ nextcloud_domain }}"
+nextcloud_enable_ssl: true
+
+# ============================================
+# 🔧 2. NGINX - снижаем нагрузку на RAM/CPU
+# ============================================
+nextcloud_nginx_client_max_body_size: "4G"
+nextcloud_nginx_fastcgi_buffers: "32 4K"             # уменьшено буферов
+nextcloud_nginx_fastcgi_read_timeout: 3600
+nextcloud_nginx_gzip_comp_level: 2
+nextcloud_nginx_gzip_min_length: 512                 # не сжимать мелкие файлы
+nextcloud_nginx_static_expires: "7d"                 # чуть дольше кеш
+nextcloud_nginx_fonts_expires: "30d"
+
+# ============================================
+# 🐘 3. PHP-FPM - КЛЮЧЕВОЕ для слабого сервера
+# ============================================
+# Главное правило: max_children * memory_limit <= RAM * 0.8
+# При memory_limit=256M и 8 children = 2GB RAM (оптимально для 2-4GB сервера)
+nextcloud_php_fpm_pm: "dynamic"
+nextcloud_php_fpm_max_children: 20
+nextcloud_php_fpm_start_servers: 4                   # минимум для старта
+nextcloud_php_fpm_min_spare: 2                       # меньше простаивающих
+nextcloud_php_fpm_max_spare: 6                       # максимум запасных
+nextcloud_php_fpm_max_requests: 1000
+
+# Параметры PHP
+nextcloud_php_memory_limit: "256M"
+nextcloud_php_upload_max_filesize: "4G"
+nextcloud_php_post_max_size: "4G"
+nextcloud_php_max_execution_time: 3600
+nextcloud_php_max_input_time: 3600
+
+# Дополнительные оптимизации PHP (добавьте в php.ini через Ansible)
+# opcache.enable=1
+# opcache.memory_consumption=64
+# opcache.max_accelerated_files=10000
+# opcache.revalidate_freq=60
+
+# ============================================
+# 📧 4. MAIL - без изменений
+# ============================================
+nextcloud_mail_smtpmode: "sendmail"
+
+# ============================================
+# ⚙️ 5. СИСТЕМНЫЕ НАСТРОЙКИ - для экономии ресурсов
+# ============================================
+nextcloud_log_timezone: "UTC"
+nextcloud_log_rotate_size: 52428800                  # 50MB (было 100MB)
+nextcloud_default_phone_region: "RU"
+nextcloud_default_language: "ru"
+nextcloud_default_locale: "ru_RU"
+nextcloud_overwrite_protocol: "https"
+nextcloud_maintenance_window_start: 1
+
+# ============================================
+# 🚀 6. ДОПОЛНИТЕЛЬНЫЕ РЕКОМЕНДАЦИИ
+# ============================================
+# Добавьте эти параметры в config.php отдельно (через occ config:system:set)
+#
+# 'memcache.local' => '\\OC\\Memcache\\APCu',
+# 'memcache.distributed' => '\\OC\\Memcache\\Redis',
+# 'memcache.locking' => '\\OC\\Memcache\\Redis',
+# 'redis' => [
+#     'host' => 'localhost',
+#     'port' => 6379,
+#     'timeout' => 0.5,
+#     'dbindex' => 0,
+# ],
+#
+# 'preview_max_x' => 1024,                    # уменьшить превью
+# 'preview_max_y' => 1024,
+# 'preview_max_scale_factor' => 1,
+# 'enabledPreviewProviders' => [              # отключить ненужные превью
+#     'OC\\Preview\\PNG',
+#     'OC\\Preview\\JPEG',
+#     'OC\\Preview\\GIF',
+#     'OC\\Preview\\MP3',
+# ],
+# 'cron_log' => true,
+# 'simpleSignUpLink.shown' => false,
+# 'updater.server.url' => '',
+# 'knowledgebaseenabled' => false,
+# 'enable_avatars' => false,                  # экономит БД
+# 'activity_expire_days' => 14,               # чистить активности
+# 'trashbin_retention_obligation' => 'auto, 14',  # корзина на 14 дней
+# 'versions_retention_obligation' => 'auto, 14',   # версии на 14 дней

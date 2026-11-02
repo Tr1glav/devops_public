@@ -1,0 +1,107 @@
+---
+- name: Установка зависимостей
+  ansible.builtin.apt:
+    name:
+      - build-essential
+      - git
+      - curl
+      - wget
+      - pkg-config
+      - "{{ awx_python }}-dev"
+      - "{{ awx_python }}-venv"
+      - python3-pip
+      - libpq-dev
+      - libffi-dev
+      - libssl-dev
+      - libxml2-dev
+      - libxmlsec1-dev
+      - libxmlsec1-openssl
+      - libsasl2-dev
+      - libldap2-dev
+      - libkrb5-dev
+      - libjpeg-dev
+      - zlib1g-dev
+      - gettext
+      - rsync
+      - unzip
+      - nodejs
+      - npm
+      - postgresql
+      - postgresql-contrib
+      - python3-psycopg2
+      - redis-server
+      - rsyslog
+      - nginx
+    state: present
+    update_cache: true
+
+- name: Install podman for execution environments
+  ansible.builtin.apt:
+    name:
+      - podman
+      - uidmap
+      - slirp4netns
+    state: present
+  when: awx_install_podman
+
+- name: Create awx group
+  ansible.builtin.group:
+    name: "{{ awx_group }}"
+    system: true
+    state: present
+
+- name: Create awx user
+  ansible.builtin.user:
+    name: "{{ awx_user }}"
+    group: "{{ awx_group }}"
+    system: true
+    shell: /bin/bash
+    home: "{{ awx_install_dir }}"
+    create_home: true
+    state: present
+
+- name: Create awx directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ awx_user }}"
+    group: "{{ awx_group }}"
+    mode: '0755'
+  loop:
+    - "{{ awx_install_dir }}"
+    - "{{ awx_source_dir }}"
+    - "{{ awx_data_dir }}"
+    - "{{ awx_projects_dir }}"
+    - "{{ awx_data_dir }}/job_status"
+    - "{{ awx_data_dir }}/tmp"
+    - "{{ awx_data_dir }}/public"
+    - "{{ awx_data_dir }}/public/static"
+    - "{{ awx_data_dir }}/rsyslog"
+    - "{{ awx_log_dir }}"
+    - "{{ awx_config_dir }}"
+    - "{{ awx_config_dir }}/conf.d"
+
+- name: Allow redis unix socket
+  ansible.builtin.lineinfile:
+    path: /etc/redis/redis.conf
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+    state: present
+  loop:
+    - regexp: '^#?\s*unixsocket\s'
+      line: "unixsocket {{ awx_redis_socket }}"
+    - regexp: '^#?\s*unixsocketperm\s'
+      line: "unixsocketperm 770"
+  notify: Restart redis
+
+- name: Add awx user to redis group
+  ansible.builtin.user:
+    name: "{{ awx_user }}"
+    groups: redis
+    append: true
+
+- name: Enable and start redis
+  ansible.builtin.systemd:
+    name: redis-server
+    enabled: true
+    state: started

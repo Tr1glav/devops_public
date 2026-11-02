@@ -1,0 +1,27 @@
+---
+- name: Get secrets
+  ansible.builtin.import_tasks: get_secrets.yml
+  tags:
+    - ocserv
+    - ocserv_users
+
+- name: Configure system
+  ansible.builtin.import_tasks: configure_system.yml
+  tags:
+    - ocserv
+
+- name: Certs
+  ansible.builtin.import_tasks: certs.yml
+  tags:
+    - ocserv
+
+- name: Configure ocserv
+  ansible.builtin.import_tasks: configure_ocserv.yml
+  tags:
+    - ocserv
+
+- name: Create users
+  ansible.builtin.import_tasks: create_users.yml
+  tags:
+    - ocserv
+    - ocserv_users

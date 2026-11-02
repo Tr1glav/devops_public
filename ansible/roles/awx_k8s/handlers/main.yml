@@ -1,0 +1,37 @@
+---
+- name: Restart awx-web
+  kubernetes.core.k8s:
+    kubeconfig: "{{ awx_k8s_kubeconfig }}"
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ awx_k8s_namespace }}"
+    name: "{{ awx_k8s_instance_name }}-web"
+    state: patched
+    definition:
+      spec:
+        template:
+          metadata:
+            annotations:
+              kubectl.kubernetes.io/restartedAt: "{{ ansible_date_time.iso8601 }}"
+
+- name: Restart awx-task
+  kubernetes.core.k8s:
+    kubeconfig: "{{ awx_k8s_kubeconfig }}"
+    api_version: apps/v1
+    kind: Deployment
+    namespace: "{{ awx_k8s_namespace }}"
+    name: "{{ awx_k8s_instance_name }}-task"
+    state: patched
+    definition:
+      spec:
+        template:
+          metadata:
+            annotations:
+              kubectl.kubernetes.io/restartedAt: "{{ ansible_date_time.iso8601 }}"
+
+- name: Uninstall awx-operator
+  kubernetes.core.helm:
+    kubeconfig: "{{ awx_k8s_kubeconfig }}"
+    name: "{{ awx_k8s_release_name }}"
+    namespace: "{{ awx_k8s_namespace }}"
+    state: absent

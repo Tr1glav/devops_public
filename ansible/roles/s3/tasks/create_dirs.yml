@@ -1,0 +1,20 @@
+---
+- name: Create S3 storage directory
+  ansible.builtin.file:
+    path: "{{ s3_mount_point }}"
+    state: directory
+    owner: www-data
+    group: www-data
+    mode: '0755'
+
+- name: Create mount directory
+  ansible.builtin.file:
+    path: "{{ s3_mount_point }}"
+    state: directory
+    mode: '0755'
+
+- name: Create credentials directory
+  ansible.builtin.file:
+    path: /etc/goofys
+    state: directory
+    mode: '0755'

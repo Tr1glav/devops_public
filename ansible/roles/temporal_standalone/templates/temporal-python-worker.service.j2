@@ -1,0 +1,18 @@
+[Unit]
+Description=Temporal Python Worker
+After=temporal-server.service
+Requires=temporal-server.service
+
+[Service]
+Type=simple
+User={{ worker_user }}
+Group={{ worker_group }}
+WorkingDirectory=/opt/temporal-worker
+ExecStart={{ python_venv_dir }}/bin/python {{ python_worker_script }}
+Restart=always
+RestartSec=10
+Environment=PYTHONUNBUFFERED=1
+Environment=TEMPORAL_CONFIG={{ worker_config_dir }}/config.yaml
+
+[Install]
+WantedBy=multi-user.target

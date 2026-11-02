@@ -1,0 +1,23 @@
+---
+- name: Detect container type
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      if grep -q 'container=lxc' /proc/1/environ 2>/dev/null; then
+        echo "lxc"
+      elif [ -f /.dockerenv ]; then
+        echo "docker"
+      elif [ -e /dev/lxd/sock ]; then
+        echo "lxd"
+      else
+        echo "none"
+      fi
+    executable: /bin/bash
+  register: vm_container_check
+  changed_when: false
+  failed_when: false
+
+- name: Set container facts
+  ansible.builtin.set_fact:
+    vm_is_container: "{{ vm_container_check.stdout != 'none' }}"
+    vm_is_lxc: "{{ vm_container_check.stdout == 'lxc' }}"

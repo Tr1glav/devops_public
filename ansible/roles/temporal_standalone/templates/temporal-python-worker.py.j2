@@ -1,0 +1,331 @@
+#!/usr/bin/env python3
+import asyncio
+import logging
+import sys
+import traceback
+import time
+import math
+from datetime import datetime, timedelta
+from temporalio import activity, workflow
+from temporalio.client import Client
+from temporalio.worker import Worker
+
+# Настройка логирования
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout),
+        logging.FileHandler('/var/log/temporal-worker/worker.log')
+    ]
+)
+logger = logging.getLogger(__name__)
+
+# Конфигурация
+TEMPORAL_HOST = "localhost:7233"
+NAMESPACE = "default"
+TASK_QUEUE = "default-task-queue"
+
+# --- Определение активностей ---
+@activity.defn
+async def say_hello(name: str) -> str:
+    """Простая активность, возвращающая приветствие"""
+    logger.info(f"Executing say_hello activity with name: {name}")
+    await asyncio.sleep(1)  # Имитация работы
+    return f"Hello, {name}!"
+
+@activity.defn
+async def calculate_sum(numbers: list) -> int:
+    """Активность для подсчета суммы"""
+    logger.info(f"Calculating sum of: {numbers}")
+    return sum(numbers)
+
+@activity.defn
+async def process_data(data: dict) -> dict:
+    """Активность для обработки данных"""
+    logger.info(f"Processing data: {data}")
+    # Имитация обработки
+    result = {
+        "original": data,
+        "processed": True,
+        "timestamp": time.time()
+    }
+    return result
+
+@activity.defn
+async def calculate_pi_digits(max_digits: int, start_from: int = 0) -> dict:
+    """
+    Активность для просчета цифр числа π
+    Использует алгоритм Бэйли—Боруэйна—Плаффа (BBP) для вычисления цифр π в шестнадцатеричной системе
+    """
+    logger.info(f"Calculating pi digits from position {start_from} to {start_from + max_digits}")
+    
+    def mod_pow(a: int, b: int, mod: int) -> int:
+        """Модульное возведение в степень"""
+        result = 1
+        a = a % mod
+        while b > 0:
+            if b & 1:
+                result = (result * a) % mod
+            a = (a * a) % mod
+            b >>= 1
+        return result
+    
+    def pi_hex_digit(n: int) -> int:
+        """Возвращает n-ю цифру числа π в шестнадцатеричной системе"""
+        def series(m: int, id: int) -> float:
+            sum_val = 0.0
+            for k in range(0, id):
+                sum_val += (mod_pow(16, id - k - 1, 8 * k + m)) / (8 * k + m)
+            return sum_val
+        
+        id = n - 1
+        s1 = series(1, id)
+        s2 = series(4, id)
+        s3 = series(5, id)
+        s4 = series(6, id)
+        
+        s1 = s1 - int(s1)
+        s2 = s2 - int(s2)
+        s3 = s3 - int(s3)
+        s4 = s4 - int(s4)
+        
+        pid = 4 * s1 - 2 * s2 - s3 - s4
+        pid = pid - int(pid) + 1
+        return int(16 * pid) % 16
+    
+    digits = []
+    for i in range(max_digits):
+        digit = pi_hex_digit(start_from + i + 1)
+        digits.append(digit)
+        
+        # Логируем каждую найденную цифру
+        if i % 10 == 0 or i == max_digits - 1:  # Логируем каждые 10 цифр и последнюю
+            hex_digits = ''.join([hex(d)[2:].upper() for d in digits])
+            logger.info(f"Progress: digits {start_from + 1}-{start_from + i + 1}: {hex_digits}")
+    
+    return {
+        "start_position": start_from,
+        "digits": digits,
+        "count": len(digits),
+        "hex_string": ''.join([hex(d)[2:].upper() for d in digits])
+    }
+
+# --- Определение workflow ---
+@workflow.defn
+class GreetingWorkflow:
+    """Workflow для приветствия"""
+    
+    @workflow.run
+    async def run(self, name: str) -> str:
+        logger.info(f"GreetingWorkflow started with name: {name}")
+        result = await workflow.execute_activity(
+            say_hello,
+            name,
+            start_to_close_timeout=timedelta(seconds=10)
+        )
+        logger.info(f"GreetingWorkflow completed: {result}")
+        return result
+
+@workflow.defn
+class MathWorkflow:
+    """Workflow для математических операций"""
+    
+    @workflow.run
+    async def run(self, numbers: list) -> dict:
+        logger.info(f"MathWorkflow started with numbers: {numbers}")
+        
+        total = await workflow.execute_activity(
+            calculate_sum,
+            numbers,
+            start_to_close_timeout=timedelta(seconds=10)
+        )
+        
+        result = {
+            "numbers": numbers,
+            "sum": total,
+            "count": len(numbers),
+            "average": total / len(numbers) if numbers else 0
+        }
+        
+        logger.info(f"MathWorkflow completed: {result}")
+        return result
+
+@workflow.defn
+class PiCalculationWorkflow:
+    """
+    Workflow для просчета числа π с ограничением по времени
+    Вычисляет цифры числа π и выводит их после запятой
+    """
+    
+    @workflow.run
+    async def run(self, digits_to_calculate: int = 100) -> dict:
+        """
+        Запуск workflow для вычисления π
+        
+        Args:
+            digits_to_calculate: количество цифр после запятой для вычисления (по умолчанию 100)
+        
+        Returns:
+            dict: результат вычисления с информацией о прогрессе
+        """
+        logger.info(f"PiCalculationWorkflow started: calculating {digits_to_calculate} digits of π")
+        
+        # Используем workflow.now() для получения времени в контексте workflow
+        start_time = workflow.now()
+        timeout_minutes = 10
+        timeout_seconds = timeout_minutes * 60
+        
+        # Разбиваем вычисление на чанки для лучшего прогресса
+        chunk_size = 10
+        all_digits = []
+        start_pos = 0
+        
+        while len(all_digits) < digits_to_calculate:
+            # Проверяем не превысили ли мы таймаут
+            current_time = workflow.now()
+            elapsed_seconds = (current_time - start_time).total_seconds()
+            
+            if elapsed_seconds > timeout_seconds:
+                logger.warning(f"Workflow timeout reached after {elapsed_seconds:.2f} seconds")
+                break
+            
+            remaining = digits_to_calculate - len(all_digits)
+            current_chunk = min(chunk_size, remaining)
+            
+            # Вычисляем следующий чанк цифр
+            try:
+                # Правильный вызов execute_activity с аргументами
+                result = await workflow.execute_activity(
+                    calculate_pi_digits,
+                    args=[current_chunk, start_pos],  # Аргументы передаются как список
+                    start_to_close_timeout=timedelta(seconds=60)
+                )
+                
+                # Добавляем новые цифры
+                all_digits.extend(result["digits"])
+                
+                # Формируем строку с текущим прогрессом
+                current_pi_hex = "3." + ''.join([hex(d)[2:].upper() for d in all_digits])
+                logger.info(f"Current π progress (hex): {current_pi_hex}")
+                logger.info(f"Calculated {len(all_digits)} digits so far")
+                
+                start_pos += current_chunk
+                
+                
+            except Exception as e:
+                logger.error(f"Error calculating pi digits: {e}")
+                break
+        
+        # Формируем финальный результат
+        pi_digits_hex = ''.join([hex(d)[2:].upper() for d in all_digits])
+        pi_hex_string = f"3.{pi_digits_hex}"
+        
+        # Конвертируем в десятичное представление для первых цифр
+        pi_decimal_approx = "3."
+        hex_to_dec = {
+            '0': '0', '1': '1', '2': '2', '3': '3',
+            '4': '4', '5': '5', '6': '6', '7': '7',
+            '8': '8', '9': '9', 'A': '10', 'B': '11',
+            'C': '12', 'D': '13', 'E': '14', 'F': '15'
+        }
+        
+        for d in pi_digits_hex[:20]:  # Первые 20 цифр
+            pi_decimal_approx += hex_to_dec.get(d, d)
+        
+        # Вычисляем затраченное время
+        end_time = workflow.now()
+        total_time = (end_time - start_time).total_seconds()
+        
+        result_summary = {
+            "digits_calculated": len(all_digits),
+            "target_digits": digits_to_calculate,
+            "pi_hex": pi_hex_string,
+            "pi_decimal_approx": pi_decimal_approx + "...",
+            "timeout_reached": len(all_digits) < digits_to_calculate,
+            "calculation_time_seconds": round(total_time, 2),
+            "first_20_digits_hex": pi_digits_hex[:20] if pi_digits_hex else "",
+            "first_20_digits_decimal": pi_decimal_approx,
+            "status": "completed" if len(all_digits) >= digits_to_calculate else "timeout"
+        }
+        
+        logger.info(f"PiCalculationWorkflow completed: {result_summary}")
+        return result_summary
+
+# --- Функция проверки соединения ---
+async def check_temporal_server():
+    """Проверяет доступность Temporal сервера"""
+    try:
+        # Просто пробуем подключиться
+        client = await Client.connect(TEMPORAL_HOST, namespace=NAMESPACE)
+        logger.info(f"Successfully connected to Temporal at {TEMPORAL_HOST}")
+        return True, client
+    except Exception as e:
+        logger.error(f"Failed to connect to Temporal: {e}")
+        return False, None
+
+# --- Основная функция воркера ---
+async def run_worker():
+    """Запуск воркера"""
+    client = None
+    
+    # Пытаемся подключиться с ретраями
+    max_retries = 10
+    for attempt in range(max_retries):
+        success, client = await check_temporal_server()
+        if success and client:
+            break
+        
+        if attempt < max_retries - 1:
+            retry_delay = 5
+            logger.info(f"Retrying connection in {retry_delay} seconds... (attempt {attempt + 1}/{max_retries})")
+            await asyncio.sleep(retry_delay)
+    
+    if not client:
+        raise Exception(f"Failed to connect to Temporal server after {max_retries} attempts")
+    
+    logger.info(f"Connected to Temporal server, namespace: {NAMESPACE}")
+    
+    # Создаем списки workflow и activities
+    workflows = [
+        GreetingWorkflow,
+        MathWorkflow,
+        PiCalculationWorkflow,
+    ]
+    
+    activities = [
+        say_hello,
+        calculate_sum,
+        process_data,
+        calculate_pi_digits,  # Теперь эта функция точно определена
+    ]
+    
+    # Создаем воркер
+    worker = Worker(
+        client,
+        task_queue=TASK_QUEUE,
+        workflows=workflows,
+        activities=activities,
+    )
+    
+    logger.info(f"Starting worker on task queue: {TASK_QUEUE}")
+    logger.info(f"Registered {len(workflows)} workflows and {len(activities)} activities")
+    
+    # Запускаем воркер (эта функция будет выполняться пока воркер не остановят)
+    await worker.run()
+
+if __name__ == "__main__":
+    logger.info("Starting Temporal Python Worker")
+    
+    # Бесконечный цикл с перезапуском при ошибках
+    while True:
+        try:
+            asyncio.run(run_worker())
+        except KeyboardInterrupt:
+            logger.info("Worker stopped by user")
+            break
+        except Exception as e:
+            logger.error(f"Worker crashed: {e}")
+            logger.error(traceback.format_exc())
+            logger.info("Restarting worker in 10 seconds...")
+            time.sleep(10)

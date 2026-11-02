@@ -1,0 +1,37 @@
+---
+- name: Get Secrets
+  ansible.builtin.import_tasks: get_secrets.yml
+
+- name: Requirements
+  ansible.builtin.import_tasks: requirements.yml
+
+- name: Certs
+  ansible.builtin.import_tasks: install_ssl.yml
+
+- name: Configure SQL
+  ansible.builtin.import_tasks: configure_sql.yml
+
+- name: Configure Front
+  ansible.builtin.import_tasks: configure_front.yml
+
+- name: Check Install Status
+  ansible.builtin.import_tasks: check_install_status.yml
+
+- name: Extract Config.php
+  ansible.builtin.import_tasks: extract_current_config.yml
+  when: nextcloud_actually_installed
+
+- name: Generate Config.php
+  ansible.builtin.import_tasks: generate_config.yml
+
+- name: Install Nextcloud
+  ansible.builtin.import_tasks: install_nextcloud.yml
+  when: not nextcloud_actually_installed
+
+- name: Configure System
+  ansible.builtin.import_tasks: configure_system.yml
+
+- name: Always restart nginx after nextcloud configuration
+  ansible.builtin.command: /bin/true
+  changed_when: true
+  notify: Restart nginx

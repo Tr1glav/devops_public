@@ -1,0 +1,35 @@
+---
+- name: Add awx-operator Helm repository
+  kubernetes.core.helm_repository:
+    name: "{{ awx_k8s_helm_repo_name }}"
+    repo_url: "{{ awx_k8s_helm_repo_url }}"
+
+- name: Create namespace
+  kubernetes.core.k8s:
+    kubeconfig: "{{ awx_k8s_kubeconfig }}"
+    name: "{{ awx_k8s_namespace }}"
+    kind: Namespace
+    state: present
+
+- name: Deploy awx-operator via Helm
+  kubernetes.core.helm:
+    kubeconfig: "{{ awx_k8s_kubeconfig }}"
+    name: "{{ awx_k8s_release_name }}"
+    chart_ref: "{{ awx_k8s_helm_repo_name }}/awx-operator"
+    chart_version: "{{ awx_k8s_operator_version }}"
+    namespace: "{{ awx_k8s_namespace }}"
+    state: present
+    wait: true
+    wait_timeout: "{{ awx_k8s_wait_timeout }}s"
+
+- name: Wait for awx-operator to be ready
+  kubernetes.core.k8s_info:
+    kubeconfig: "{{ awx_k8s_kubeconfig }}"
+    kind: Pod
+    namespace: "{{ awx_k8s_namespace }}"
+    label_selectors:
+      - "control-plane=controller-manager"
+    field_selectors:
+      - "status.phase=Running"
+    wait: true
+    wait_timeout: "{{ awx_k8s_wait_timeout }}"

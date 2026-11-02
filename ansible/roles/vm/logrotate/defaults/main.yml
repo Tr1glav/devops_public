@@ -1,0 +1,5 @@
+---
+rotate_weeks: 4
+max_log_size: 100M
+min_log_size: 1K
+extra_log_configs: []

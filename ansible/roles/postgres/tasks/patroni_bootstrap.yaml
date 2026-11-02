@@ -1,0 +1,59 @@
+---
+- name: Stop Patroni on all nodes
+  ansible.builtin.systemd:
+    name: patroni
+    state: stopped
+  tags: [patroni, bootstrap]
+
+- name: Remove cluster from etcd
+  ansible.builtin.uri:
+    url: >-
+      http://{{ hostvars[item].ansible_host }}:2379/v2/keys/service/{{
+      patroni_cluster_name }}?recursive=true
+    method: DELETE
+    status_code: 200
+  loop: "{{ groups['etcd-standalone'] }}"
+  failed_when: false
+  when: inventory_hostname == groups['postgres'][0]
+  tags: [patroni, bootstrap]
+
+- name: Clean PostgreSQL data directory on all nodes
+  ansible.builtin.file:
+    path: "/var/lib/postgresql/{{ postgres_version }}/main"
+    state: absent
+  tags: [patroni, bootstrap]
+
+- name: Clean PostgreSQL other data directory on all nodes
+  ansible.builtin.file:
+    path: "/var/lib/postgresql/{{ postgres_version }}/main*"
+    state: absent
+  tags: [patroni, bootstrap]
+
+- name: Ensure Postgres files directory exists
+  ansible.builtin.file:
+    path: /var/lib/postgresql/{{ postgres_version }}/main
+    state: directory
+    owner: "{{ patroni_user }}"
+    group: "{{ patroni_group }}"
+    mode: '0750'
+    recurse: true
+  tags: [patroni, bootstrap]
+
+- name: Start Patroni on first node to bootstrap cluster
+  ansible.builtin.systemd:
+    name: patroni
+    state: started
+  when: inventory_hostname == groups['postgres'][0]
+  tags: [patroni, bootstrap]
+
+- name: Start Patroni on remaining nodes
+  ansible.builtin.systemd:
+    name: patroni
+    state: started
+  when: inventory_hostname != groups['postgres'][0]
+  tags: [patroni, bootstrap]
+
+- name: Wait for cluster stabilization
+  ansible.builtin.pause:
+    seconds: 30
+  tags: [patroni, bootstrap]

@@ -1,0 +1,34 @@
+---
+- name: Validation
+  ansible.builtin.import_tasks: validation.yml
+  tags:
+    - postgres_validate
+    - postgres
+
+- name: Configure postgres repo
+  ansible.builtin.import_tasks: postgres_repo.yml
+  tags:
+    - postgres
+
+- name: Get secrets
+  ansible.builtin.import_tasks: get_secrets.yml
+  tags:
+    - postgres
+
+- name: Configure venv
+  ansible.builtin.import_tasks: configure_venv.yml
+  tags:
+    - postgres
+
+- name: Ensure patroni
+  ansible.builtin.import_tasks: ensure_patroni.yml
+  tags:
+    - postgres
+
+- name: Start patroni
+  ansible.builtin.import_tasks: start_patroni.yml
+  tags:
+    - postgres
+
+- name: Check leader
+  ansible.builtin.import_tasks: check_leader.yml

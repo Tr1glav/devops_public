@@ -1,0 +1,17 @@
+[Unit]
+Description=AWX Receptor
+After=network.target
+
+[Service]
+Type=simple
+User={{ awx_user }}
+Group={{ awx_group }}
+WorkingDirectory={{ awx_data_dir }}
+ExecStart=/usr/local/bin/receptor --config /etc/receptor/receptor.conf
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

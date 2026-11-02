@@ -1,0 +1,83 @@
+---
+# Прозрачный транзит: трафик с tunnel_client_transit_sources, идущий через
+# хост, перехватывается TPROXY и передаётся в dokodemo-door inbound Xray
+# (tunnel_client_tproxy_port). Xray routing решает: geoip:private -> direct,
+# остальное -> активный туннель. Собственный исходящий трафик хоста
+# (OUTPUT) не затрагивается — только транзитный (PREROUTING).
+#
+# Правила живут в памяти ядра и стираются при перезагрузке, поэтому логика
+# вынесена в скрипт + oneshot-юнит: ansible и boot применяют одно и то же.
+
+- name: Enable IP forwarding
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_forward
+    value: "1"
+    state: present
+    sysctl_set: true
+    reload: true
+  when: tunnel_client_tproxy_enabled
+
+- name: Deploy TPROXY setup script
+  ansible.builtin.template:
+    src: tunnel-tproxy-up.sh.j2
+    dest: /usr/local/sbin/tunnel-tproxy-up.sh
+    owner: root
+    group: root
+    mode: '0755'
+  when: tunnel_client_tproxy_enabled
+
+- name: Deploy TPROXY restore unit
+  ansible.builtin.template:
+    src: tunnel-tproxy.service.j2
+    dest: /etc/systemd/system/tunnel-tproxy.service
+    owner: root
+    group: root
+    mode: '0644'
+  notify: Reload systemd
+  when: tunnel_client_tproxy_enabled
+
+- name: Apply TPROXY rules
+  ansible.builtin.command: /usr/local/sbin/tunnel-tproxy-up.sh
+  register: _tunnel_client_tproxy_apply
+  changed_when: "'changed=1' in _tunnel_client_tproxy_apply.stdout"
+  when: tunnel_client_tproxy_enabled
+
+- name: Enable TPROXY restore unit
+  ansible.builtin.systemd:
+    name: tunnel-tproxy.service
+    enabled: true
+    state: started
+    daemon_reload: true
+  when: tunnel_client_tproxy_enabled
+
+# --- Отключение транзита ---------------------------------------------------
+- name: Remove TPROXY chains and rules
+  ansible.builtin.shell: |
+    set -e
+    removed=0
+    del() {
+      if iptables -t mangle -C "$@" 2>/dev/null; then
+        iptables -t mangle -D "$@" && removed=$((removed+1))
+      fi
+    }
+    del PREROUTING -p tcp -m socket -j TUNNEL_TP_DIVERT
+    del PREROUTING -p udp -m socket -j TUNNEL_TP_DIVERT
+    {% for src in tunnel_client_transit_sources %}
+    del PREROUTING -s {{ src }} -p tcp -j TUNNEL_TP
+    del PREROUTING -s {{ src }} -p udp -j TUNNEL_TP
+    {% endfor %}
+    for c in TUNNEL_TP TUNNEL_TP_DIVERT; do
+      iptables -t mangle -F $c 2>/dev/null || true
+      iptables -t mangle -X $c 2>/dev/null || true
+    done
+    echo "removed=$removed"
+  register: _tunnel_client_ipt_rm
+  changed_when: "'removed=0' not in _tunnel_client_ipt_rm.stdout"
+  when: not tunnel_client_tproxy_enabled
+
+- name: Disable TPROXY restore unit
+  ansible.builtin.systemd:
+    name: tunnel-tproxy.service
+    enabled: false
+    state: stopped
+  when: not tunnel_client_tproxy_enabled

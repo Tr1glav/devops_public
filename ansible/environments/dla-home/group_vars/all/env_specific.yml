@@ -1,0 +1,6 @@
+---
+product_team: dla
+env: home
+product_env: "{{ product_team }}-{{ env }}"
+
+resolved_conf_dns: []

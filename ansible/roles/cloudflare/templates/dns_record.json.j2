@@ -1,0 +1,8 @@
+{
+  "type": "{{ item.value.type }}",
+  "name": "{{ item.key }}",
+  "content": "{{ item.value.content }}",
+  "ttl": {{ item.value.ttl }},
+  "proxied": {{ item.value.proxied | lower }},
+  "comment": "managed_by=ansible env={{ item.value.env }}"
+}

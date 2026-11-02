@@ -1,0 +1,15 @@
+---
+- name: Create Cloudflare credentials directory
+  ansible.builtin.file:
+    path: /etc/letsencrypt/cloudflare
+    state: directory
+    mode: '0700'
+
+- name: Configure Cloudflare API credentials
+  ansible.builtin.copy:
+    dest: /etc/letsencrypt/cloudflare/cloudflare.ini
+    content: |
+      dns_cloudflare_api_token = {{
+        _certbot_vault_cf_secrets.json.data.data.token }}
+    mode: '0600'
+  when: _certbot_vault_cf_secrets.status == 200

@@ -1,0 +1,9 @@
+---
+controller:
+  ingressClassResource:
+    enabled: true
+  kind: DaemonSet
+  daemonset:
+    useHostPort: true
+  service:
+    type: ClusterIP

@@ -1,0 +1,253 @@
+---
+- name: Ensure system dependencies are installed
+  ansible.builtin.package:
+    name:
+      - curl
+      - tar
+      - sqlite3
+      - python3
+      - python3-venv
+      - python3-full
+      - python3-pip
+      - openjdk-17-jre-headless
+    state: present
+
+- name: Create temporal system group
+  ansible.builtin.group:
+    name: "{{ temporal_group }}"
+    system: true
+    state: present
+
+- name: Create temporal system user
+  ansible.builtin.user:
+    name: "{{ temporal_user }}"
+    group: "{{ temporal_group }}"
+    system: true
+    home: "{{ data_dir }}"
+    create_home: false
+    shell: /sbin/nologin
+    state: present
+
+- name: Create data directory
+  ansible.builtin.file:
+    path: "{{ data_dir }}"
+    state: directory
+    owner: "{{ temporal_user }}"
+    group: "{{ temporal_group }}"
+    mode: '0755'
+
+- name: Download Temporal CLI
+  ansible.builtin.get_url:
+    url: "{{ temporal_cli_url }}"
+    dest: "/tmp/temporal-cli.tar.gz"
+    mode: '0644'
+
+- name: Extract Temporal CLI
+  ansible.builtin.unarchive:
+    src: "/tmp/temporal-cli.tar.gz"
+    dest: "/tmp/"
+    remote_src: true
+    creates: "/tmp/temporal"
+
+- name: Install Temporal CLI
+  ansible.builtin.copy:
+    src: "/tmp/temporal"
+    dest: "{{ bin_dir }}/temporal"
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0755'
+
+- name: Check if database already exists
+  ansible.builtin.stat:
+    path: "{{ db_file }}"
+  register: db_file_stat
+
+- name: Initialize SQLite database
+  ansible.builtin.shell:
+    cmd: |
+      {{ bin_dir }}/temporal server start-dev \
+        --db-filename {{ db_file }} \
+        --headless &
+      SERVER_PID=$!
+
+      for i in {1..30}; do
+        if [ -f "{{ db_file }}" ]; then
+          echo "Database file created"
+          break
+        fi
+        sleep 1
+      done
+
+      kill $SERVER_PID
+      wait $SERVER_PID 2>/dev/null || true
+    creates: "{{ db_file }}"
+  become: true
+  become_user: "{{ temporal_user }}"
+  when: not db_file_stat.stat.exists
+  register: db_init
+  args:
+    executable: /bin/bash
+
+- name: Set permissions on database file
+  ansible.builtin.file:
+    path: "{{ db_file }}"
+    owner: "{{ temporal_user }}"
+    group: "{{ temporal_group }}"
+    mode: '0644'
+
+- name: Create systemd service file for Temporal Server
+  ansible.builtin.template:
+    src: temporal-server.service.j2
+    dest: /etc/systemd/system/temporal-server.service
+    mode: '0644'
+
+- name: Enable and start Temporal Server service
+  ansible.builtin.systemd:
+    name: temporal-server
+    enabled: true
+    state: started
+    daemon_reload: true
+
+- name: Create worker system group
+  ansible.builtin.group:
+    name: "{{ worker_group }}"
+    system: true
+    state: present
+
+- name: Create worker system user
+  ansible.builtin.user:
+    name: "{{ worker_user }}"
+    group: "{{ worker_group }}"
+    system: true
+    home: "/opt/temporal-worker"
+    create_home: false
+    shell: /sbin/nologin
+    state: present
+
+- name: Create worker directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ worker_user }}"
+    group: "{{ worker_group }}"
+    mode: '0755'
+  loop:
+    - "/opt/temporal-worker"
+    - "{{ worker_config_dir }}"
+    - "{{ worker_log_dir }}"
+
+- name: Create Python virtual environment
+  ansible.builtin.command:
+    cmd: "python3 -m venv {{ python_venv_dir }}"
+    creates: "{{ python_venv_dir }}/bin/activate"
+  become: true
+  become_user: "{{ worker_user }}"
+  when: install_python_worker | default(true)
+
+- name: Install Temporal Python SDK in virtual environment
+  ansible.builtin.pip:
+    name:
+      - temporalio
+    virtualenv: "{{ python_venv_dir }}"
+    virtualenv_command: "python3 -m venv"
+  become: true
+  become_user: "{{ worker_user }}"
+  when: install_python_worker | default(true)
+
+- name: Deploy Python worker script
+  ansible.builtin.template:
+    src: temporal-python-worker.py.j2
+    dest: "{{ python_worker_script }}"
+    owner: "{{ worker_user }}"
+    group: "{{ worker_group }}"
+    mode: '0755'
+  when: install_python_worker | default(true)
+
+- name: Download Java worker JAR
+  ansible.builtin.get_url:
+    url: "{{ worker_jar_url }}"
+    dest: "{{ worker_jar_dest }}"
+    owner: "{{ worker_user }}"
+    group: "{{ worker_group }}"
+    mode: '0644'
+  when: install_java_worker | default(false)
+
+- name: Create worker configuration
+  ansible.builtin.template:
+    src: temporal-worker-config.yaml.j2
+    dest: "{{ worker_config_dir }}/config.yaml"
+    owner: "{{ worker_user }}"
+    group: "{{ worker_group }}"
+    mode: '0644'
+
+- name: Create systemd service for Python worker
+  ansible.builtin.template:
+    src: temporal-python-worker.service.j2
+    dest: /etc/systemd/system/temporal-python-worker.service
+    mode: '0644'
+  when: install_python_worker | default(true)
+
+- name: Create systemd service for Java worker
+  ansible.builtin.template:
+    src: temporal-java-worker.service.j2
+    dest: /etc/systemd/system/temporal-java-worker.service
+    mode: '0644'
+  when: install_java_worker | default(false)
+
+- name: Enable and start worker services
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    enabled: true
+    state: started
+    daemon_reload: true
+  loop:
+    - temporal-python-worker
+    - temporal-java-worker
+  when: >
+    (item == 'temporal-python-worker' and
+      (install_python_worker | default(true))) or
+    (item == 'temporal-java-worker' and
+      (install_java_worker | default(false)))
+
+- name: Wait for Temporal to be ready
+  ansible.builtin.wait_for:
+    port: 7233
+    delay: 5
+    timeout: 30
+
+- name: Create default namespace
+  ansible.builtin.shell:
+    cmd: |
+      {{ bin_dir }}/temporal operator namespace create default \
+        --retention 1 2>/dev/null || true
+  register: namespace_create
+  changed_when: false
+
+- name: Verify Temporal is running
+  ansible.builtin.shell:
+    cmd: |
+      {{ bin_dir }}/temporal operator namespace list
+  register: namespace_check
+  changed_when: false
+
+- name: Check worker status
+  ansible.builtin.shell:
+    cmd: |
+      systemctl status temporal-python-worker --no-pager || true
+      systemctl status temporal-java-worker --no-pager || true
+  register: worker_status
+  changed_when: false
+
+- name: Display namespace list
+  ansible.builtin.debug:
+    msg: "{{ namespace_check.stdout_lines }}"
+
+- name: Display worker status
+  ansible.builtin.debug:
+    msg: "{{ worker_status.stdout_lines }}"
+
+- name: Cleanup temporary files
+  ansible.builtin.file:
+    path: "/tmp/temporal-cli.tar.gz"
+    state: absent

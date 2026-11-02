@@ -1,0 +1,70 @@
+---
+- name: Enable and start postgresql
+  ansible.builtin.systemd:
+    name: postgresql
+    enabled: true
+    state: started
+
+- name: Generate database locale
+  community.general.locale_gen:
+    name: "{{ item }}"
+    state: present
+  loop: "{{ [awx_db_lc_collate, awx_db_lc_ctype] | unique }}"
+  when:
+    - awx_db_host in ['localhost', '<hidden-ip>']
+    - not item.startswith('C.')
+  notify: Restart postgresql
+
+- name: Setup PostgreSQL database
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_db:
+    name: "{{ awx_db_name }}"
+    encoding: "{{ awx_db_encoding }}"
+    lc_collate: "{{ awx_db_lc_collate }}"
+    lc_ctype: "{{ awx_db_lc_ctype }}"
+    template: 'template0'
+  when: awx_db_host in ['localhost', '<hidden-ip>']
+
+- name: Setup PostgreSQL user
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_user:
+    name: "{{ awx_db_user }}"
+    password: "{{ awx_db_password }}"
+    db: "{{ awx_db_name }}"
+    role_attr_flags: "LOGIN"
+  no_log: true
+  when: awx_db_host in ['localhost', '<hidden-ip>']
+
+- name: Grant database privileges
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_privs:
+    db: "{{ awx_db_name }}"
+    role: "{{ awx_db_user }}"
+    type: schema
+    objs: public
+    privs: "CREATE,USAGE"
+  when: awx_db_host in ['localhost', '<hidden-ip>']
+
+- name: Get pg_hba.conf path
+  become: true
+  become_user: postgres
+  community.postgresql.postgresql_query:
+    db: postgres
+    query: "SHOW hba_file"
+  register: awx_pg_hba_file
+  changed_when: false
+  when: awx_db_host in ['localhost', '<hidden-ip>']
+
+- name: Configure PostgreSQL connection
+  community.postgresql.postgresql_pg_hba:
+    dest: "{{ awx_pg_hba_file.query_result[0].hba_file }}"
+    contype: host
+    databases: "{{ awx_db_name }}"
+    users: "{{ awx_db_user }}"
+    method: md5
+    address: "<hidden-ip>/32"
+  notify: Restart postgresql
+  when: awx_db_host in ['localhost', '<hidden-ip>']

@@ -1,0 +1,9 @@
+---
+- name: Install awx
+  hosts: ansible
+  become: true
+  roles:
+    - role: k3s
+      vars:
+        k3s_mode: server
+    - role: awx_k8s

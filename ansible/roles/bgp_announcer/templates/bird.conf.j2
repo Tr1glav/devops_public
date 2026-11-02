@@ -1,0 +1,42 @@
+# Управляется Ansible (роль bgp_announcer). Ручные правки будут перезаписаны.
+#
+# BIRD2 раздаёт MikroTik'у префиксы из announced.conf (списки с GitHub):
+# приходят только наши анонсы (import none), наружу уходит только то, что
+# лежит в static_announced. Kernel-протокол ничего не экспортирует —
+# маршруты нужны только для BGP, в таблицу ядра хоста они не попадают.
+
+router id {{ bgp_announcer_router_id }};
+log syslog all;
+
+protocol device {
+  scan time 30;
+}
+
+protocol kernel {
+  ipv4 {
+    import none;
+    export none;
+  };
+}
+
+# Анонсируемые префиксы — генерируются bgp-lists-update из списков
+protocol static static_announced {
+  ipv4;
+  include "{{ bgp_announcer_announced_file }}";
+}
+
+protocol bgp mikrotik {
+  local as {{ bgp_announcer_local_as }};
+  neighbor {{ bgp_announcer_peer_address }} as {{ bgp_announcer_peer_as }};
+  multihop {{ bgp_announcer_multihop }};
+  hold time {{ bgp_announcer_hold_time }};
+  keepalive time {{ bgp_announcer_keepalive_time }};
+  connect delay time 5;
+  ipv4 {
+    import none;
+    export filter {
+      if source = RTS_STATIC then accept;
+      reject;
+    };
+  };
+}

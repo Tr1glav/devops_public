@@ -1,0 +1,20 @@
+---
+- name: Install k3s
+  ansible.builtin.import_tasks: install.yml
+  tags:
+    - k3s
+    - k3s_install
+
+- name: Configure firewall
+  ansible.builtin.import_tasks: firewall.yml
+  when: k3s_mode == "server"
+  tags:
+    - k3s
+    - k3s_firewall
+
+- name: Display kubeconfig
+  ansible.builtin.import_tasks: display_kubeconfig.yml
+  tags:
+    - k3s
+    - k3s_display_kubeconfig
+    - never

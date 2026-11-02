@@ -1,0 +1,6 @@
+---
+- name: Install etcd_standalone
+  hosts: etcd-standalone
+  become: true
+  roles:
+    - role: etcd_standalone

@@ -1,0 +1,27 @@
+---
+- name: Set facts container
+  hosts: all
+  become: true
+  roles:
+    - vm/check_container
+
+- name: Upgrade
+  hosts: all
+  become: true
+  roles:
+    - vm/upgrade
+
+- name: Install qemu
+  hosts: all
+  become: true
+  roles:
+    - vm/install_qemu_guest
+
+- name: Reboot
+  hosts: all
+  become: true
+  serial: 1
+  roles:
+    - role: vm/reboot
+      when:
+        - not vm_is_container

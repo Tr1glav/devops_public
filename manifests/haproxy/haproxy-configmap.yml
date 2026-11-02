@@ -1,0 +1,36 @@
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  namespace: haproxy
+  name: haproxy-config
+data:
+  haproxy.cfg: |
+    defaults
+      mode http
+
+      timeout connect 5000ms
+
+      timeout client 50000ms
+
+      timeout server 50000ms
+
+    frontend http
+
+      bind *:80
+
+      bind *:443 ssl crt /usr/local/etc/haproxy/ssl/dev.dla.su.pem
+
+      default_backend argo.dev.dla.su
+    frontend pgsql.dev.dla.su
+
+      bind *:5000
+
+      mode tcp
+      default_backend pgsql.dev.dla.su
+    backend argo.dev.dla.su
+
+      server s1 argocd-server.argocd:443 check ssl verify none
+    backend pgsql.dev.dla.su
+
+      server s1 postgres-service.postgres:5432 check port 5432

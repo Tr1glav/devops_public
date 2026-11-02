@@ -1,0 +1,88 @@
+---
+- name: Download Goofys
+  ansible.builtin.get_url:
+    url: "https://github.com/kahing/goofys/releases/latest/download/goofys"
+    dest: /usr/local/bin/goofys
+    mode: '0755'
+
+- name: Configure AWS credentials for Goofys
+  ansible.builtin.copy:
+    content: |
+      [default]
+      aws_access_key_id = {{ s3_access_key }}
+      aws_secret_access_key = {{ s3_secret_key }}
+    dest: /etc/goofys/credentials
+    mode: '0600'
+
+- name: Mount S3 bucket with Goofys
+  ansible.builtin.command:
+    cmd: >-
+      /usr/local/bin/goofys
+      --endpoint {{ s3_endpoint }}
+      --stat-cache-ttl {{ goofys_stat_cache_ttl | default('1m') }}
+      --type-cache-ttl {{ goofys_type_cache_ttl | default('1m') }}
+      --dir-mode {{ goofys_dir_mode | default('0777') }}
+      --file-mode {{ goofys_file_mode | default('0666') }}
+      {% if s3_region is defined %}--region {{ s3_region }}{% endif %}
+      {{ s3_bucket }} {{ s3_mount_point }}
+  environment:
+    AWS_ACCESS_KEY_ID: "{{ s3_access_key }}"
+    AWS_SECRET_ACCESS_KEY: "{{ s3_secret_key }}"
+    AWS_REGION: "{{ s3_region | default('us-east-1') }}"
+  async: 30
+  poll: 0
+  register: s3_goofys_mount
+
+- name: Wait for Goofys to start
+  ansible.builtin.pause:
+    seconds: 5
+
+- name: Verify mount
+  ansible.builtin.command:
+    cmd: "mountpoint {{ s3_mount_point }}"
+  register: s3_mount_result
+  changed_when: false
+
+- name: Create systemd service for Goofys
+  ansible.builtin.copy:
+    content: |
+      [Unit]
+      Description=Goofys mount for {{ s3_bucket }}
+      After=network-online.target
+      Wants=network-online.target
+
+      [Service]
+      Type=forking
+      Environment=AWS_ACCESS_KEY_ID={{ s3_access_key }}
+      Environment=AWS_SECRET_ACCESS_KEY={{ s3_secret_key }}
+      Environment=AWS_REGION={{ s3_region | default('us-east-1') }}
+      ExecStart=/usr/local/bin/goofys \
+        --endpoint {{ s3_endpoint }} \
+        --stat-cache-ttl {{ goofys_stat_cache_ttl | default('1m') }} \
+        --type-cache-ttl {{ goofys_type_cache_ttl | default('1m') }} \
+        --dir-mode {{ goofys_dir_mode | default('0777') }} \
+        --file-mode {{ goofys_file_mode | default('0666') }} \
+        {% if s3_region is defined %}--region {{ s3_region }} {% endif %}
+        {{ s3_bucket }} {{ s3_mount_point }}
+      ExecStop=/bin/fusermount -u {{ s3_mount_point }}
+      Restart=on-failure
+      RestartSec=5
+
+      [Install]
+      WantedBy=multi-user.target
+    dest: /etc/systemd/system/goofys-{{ s3_bucket | replace('.', '-') }}.service
+    mode: '0644'
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true
+
+- name: Enable and start Goofys service
+  ansible.builtin.systemd:
+    name: "goofys-{{ s3_bucket | replace('.', '-') }}"
+    state: started
+    enabled: true
+
+- name: Show mount status
+  ansible.builtin.debug:
+    var: s3_mount_result.stdout

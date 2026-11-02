@@ -1,0 +1,161 @@
+---
+- name: Get secrets
+  ansible.builtin.import_tasks: get_secrets.yml
+  when: tunnel_client_use_vault
+
+- name: Set effective credentials
+  ansible.builtin.set_fact:
+    tunnel_client_eff_login: >-
+      {{ (tunnel_client_secret_data.login | default('')) or tunnel_client_login }}
+    tunnel_client_eff_password: >-
+      {{ (tunnel_client_secret_data.password | default('')) or tunnel_client_password }}
+
+# Громкий фейл вместо тихого деплоя без кредов (failed_when: false в vault_read
+# глотает ошибки модуля, например отсутствие hvac на контроллере)
+- name: Assert credentials are present
+  ansible.builtin.assert:
+    that:
+      - tunnel_client_eff_login | length > 0
+      - tunnel_client_eff_password | length > 0
+    fail_msg: >-
+      Креды Tunnel пустые: vault_read вернул {{ _tunnel_client_secret | default({}) | to_json | truncate(200, True) }}.
+      Проверь hvac (pip install hvac), VAULT_TOKEN и путь {{ tunnel_client_vault_mount }}/data/{{ tunnel_client_vault_path }}.
+    quiet: true
+
+- name: Ensure bootstrap DNS independent of the tunnel
+  ansible.builtin.copy:
+    dest: /etc/systemd/resolved.conf.d/99-tunnel-client.conf
+    owner: root
+    group: root
+    mode: '0644'
+    content: |
+      [Resolve]
+      DNS={{ tunnel_client_bootstrap_dns | join(' ') }}
+  notify: Restart systemd-resolved
+
+- name: Install dependencies
+  ansible.builtin.apt:
+    name: "{{ tunnel_client_packages }}"
+    state: present
+    update_cache: true
+
+- name: Create install directory
+  ansible.builtin.file:
+    path: "{{ tunnel_client_install_dir }}"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Check installed xray version
+  ansible.builtin.command: "{{ tunnel_client_install_dir }}/xray-bin/xray version"
+  register: _tunnel_client_installed
+  changed_when: false
+  failed_when: false
+
+- name: Set xray install needed fact
+  ansible.builtin.set_fact:
+    tunnel_client_xray_install_needed: >-
+      {{ _tunnel_client_installed.rc != 0
+         or tunnel_client_xray_version not in _tunnel_client_installed.stdout }}
+
+- name: Check if xray archive exists locally
+  ansible.builtin.stat:
+    path: "/tmp/xray_{{ tunnel_client_xray_version }}_linux_64.zip"
+  register: _tunnel_client_local_zip
+  delegate_to: localhost
+  become: false
+  run_once: true
+  when: tunnel_client_xray_install_needed
+
+- name: Download Xray-core locally if archive does not exist
+  ansible.builtin.get_url:
+    url: "{{ tunnel_client_xray_url }}"
+    dest: "/tmp/xray_{{ tunnel_client_xray_version }}_linux_64.zip"
+    mode: '0644'
+  delegate_to: localhost
+  become: false
+  run_once: true
+  when:
+    - tunnel_client_xray_install_needed
+    - not _tunnel_client_local_zip.stat.exists
+
+- name: Copy Xray archive to remote host
+  ansible.builtin.copy:
+    src: "/tmp/xray_{{ tunnel_client_xray_version }}_linux_64.zip"
+    dest: /tmp/xray.zip
+    mode: '0644'
+  when: tunnel_client_xray_install_needed
+
+- name: Create xray bin directory
+  ansible.builtin.file:
+    path: "{{ tunnel_client_install_dir }}/xray-bin"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+  when: tunnel_client_xray_install_needed
+
+- name: Extract Xray-core
+  ansible.builtin.unarchive:
+    src: /tmp/xray.zip
+    dest: "{{ tunnel_client_install_dir }}/xray-bin"
+    remote_src: true
+    mode: '0755'
+    owner: root
+    group: root
+  when: tunnel_client_xray_install_needed
+  notify: Restart tunnel-client
+
+- name: Remove temporary archive
+  ansible.builtin.file:
+    path: /tmp/xray.zip
+    state: absent
+  when: tunnel_client_xray_install_needed
+
+- name: Deploy tunnel client script
+  ansible.builtin.copy:
+    src: tunnel_client.py
+    dest: "{{ tunnel_client_install_dir }}/tunnel_client.py"
+    mode: '0755'
+    owner: root
+    group: root
+  notify: Restart tunnel-client
+
+- name: Create credentials directory
+  ansible.builtin.file:
+    path: "{{ tunnel_client_creds_file | dirname }}"
+    state: directory
+    mode: '0755'
+    owner: root
+    group: root
+
+- name: Create credentials file
+  ansible.builtin.copy:
+    dest: "{{ tunnel_client_creds_file }}"
+    owner: root
+    group: root
+    mode: '0600'
+    content: |
+      LOGIN={{ tunnel_client_eff_login }}
+      PASSWORD={{ tunnel_client_eff_password }}
+  when: tunnel_client_eff_login | length > 0
+  no_log: true
+  notify: Restart tunnel-client
+
+- name: Deploy systemd service
+  ansible.builtin.template:
+    src: tunnel-client.service.j2
+    dest: /etc/systemd/system/tunnel-client.service
+    mode: '0644'
+  notify: Reload systemd
+
+- name: Ensure tunnel-client service
+  ansible.builtin.systemd:
+    name: tunnel-client
+    enabled: "{{ tunnel_client_service_enabled }}"
+    state: "{{ tunnel_client_service_state }}"
+    daemon_reload: true
+
+- name: Configure transparent transit (TPROXY)
+  ansible.builtin.import_tasks: tproxy.yml

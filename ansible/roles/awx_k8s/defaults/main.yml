@@ -1,0 +1,80 @@
+---
+awx_k8s_operator_version: "2.19.1"
+awx_k8s_namespace: "awx"
+awx_k8s_release_name: "awx-operator"
+awx_k8s_instance_name: "awx"
+awx_k8s_domain: "awx.{{ domain }}"
+
+awx_k8s_helm_repo_name: "awx-operator"
+awx_k8s_helm_repo_url: "https://ansible-community.github.io/awx-operator-helm/"
+
+awx_k8s_helm_version: "v3.16.3"
+awx_k8s_helm_install_script_url: >-
+  https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3
+
+awx_k8s_kubeconfig: "/etc/rancher/k3s/k3s.yaml"
+
+awx_k8s_admin_user: "admin"
+awx_k8s_admin_password: ""
+awx_k8s_admin_password_len: 32
+
+awx_k8s_vault_mount: "infra"
+awx_k8s_vault_path: "{{ env }}/awx"
+
+awx_k8s_enable_ssl: false
+awx_k8s_certs_vault_mount: "certs"
+awx_k8s_certs_vault_path: "{{ env }}/{{ awx_k8s_domain }}"
+
+# traefik в роли k3s отключён, поэтому по умолчанию публикуем AWX
+# через NodePort и заводим его бэкендом в haproxy
+awx_k8s_service_type: "NodePort"
+awx_k8s_nodeport_port: 30080
+awx_k8s_ingress_type: "none"
+awx_k8s_ingress_class: "traefik"
+
+# managed - оператор поднимает свой postgres,
+# unmanaged - используется внешний (роль postgres)
+awx_k8s_postgres_type: "managed"
+awx_k8s_db_name: "awx"
+awx_k8s_db_user: "awx"
+awx_k8s_db_host: "localhost"
+awx_k8s_db_port: 5432
+awx_k8s_db_password: ""
+awx_k8s_db_sslmode: "prefer"
+awx_k8s_postgres_storage_size: "20Gi"
+
+awx_k8s_projects_persistence: true
+awx_k8s_projects_storage_size: "8Gi"
+awx_k8s_projects_storage_access_mode: "ReadWriteOnce"
+awx_k8s_storage_class: ""
+
+awx_k8s_web_replicas: 1
+awx_k8s_task_replicas: 1
+
+awx_k8s_web_resources:
+  requests:
+    memory: "1Gi"
+    cpu: "500m"
+  limits:
+    memory: "2Gi"
+    cpu: "1000m"
+
+awx_k8s_task_resources:
+  requests:
+    memory: "1Gi"
+    cpu: "500m"
+  limits:
+    memory: "2Gi"
+    cpu: "1000m"
+
+awx_k8s_ee_resources:
+  requests:
+    memory: "256Mi"
+    cpu: "100m"
+  limits:
+    memory: "1Gi"
+    cpu: "500m"
+
+awx_k8s_extra_settings: []
+
+awx_k8s_wait_timeout: 900

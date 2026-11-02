@@ -1,0 +1,83 @@
+---
+- name: Check local grafana archive
+  ansible.builtin.stat:
+    path: "/tmp/grafana-{{ grafana_version }}.linux-amd64.tar.gz"
+  register: grafana_local_grafana_file
+  delegate_to: localhost
+  become: false
+  run_once: true
+
+- name: Download grafana locally
+  ansible.builtin.get_url:
+    url: "{{ grafana_url }}"
+    dest: "/tmp/grafana-{{ grafana_version }}.linux-amd64.tar.gz"
+    mode: '0644'
+  delegate_to: localhost
+  become: false
+  when: not grafana_local_grafana_file.stat.exists
+  run_once: true
+
+- name: Copy grafana to remote host
+  ansible.builtin.copy:
+    src: "/tmp/grafana-{{ grafana_version }}.linux-amd64.tar.gz"
+    dest: "/tmp/grafana.tar.gz"
+    mode: '0644'
+
+- name: Create grafana group
+  ansible.builtin.group:
+    name: "{{ grafana_group }}"
+    system: true
+    state: present
+
+- name: Create grafana user
+  ansible.builtin.user:
+    name: "{{ grafana_user }}"
+    group: "{{ grafana_group }}"
+    system: true
+    shell: "/bin/false"
+    home: "{{ grafana_dir }}"
+    create_home: false
+    state: present
+
+- name: Create grafana directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ grafana_user }}"
+    group: "{{ grafana_group }}"
+    mode: '0755'
+  loop:
+    - "{{ grafana_dir }}"
+    - "{{ grafana_config_dir }}"
+
+- name: Check if grafana is already installed
+  ansible.builtin.stat:
+    path: "{{ grafana_dir }}/bin/grafana"
+  register: grafana_binary
+
+- name: Extract grafana
+  ansible.builtin.unarchive:
+    src: "/tmp/grafana.tar.gz"
+    dest: "/tmp"
+    remote_src: true
+    creates: "/tmp/grafana-v{{ grafana_version }}/bin/grafana"
+  when: not grafana_binary.stat.exists
+
+- name: Ensure grafana directory is clean
+  ansible.builtin.file:
+    path: "{{ grafana_dir }}"
+    state: absent
+  when: not grafana_binary.stat.exists
+
+- name: Move grafana to target directory
+  ansible.builtin.command: >-
+    mv /tmp/grafana-v{{ grafana_version }} {{ grafana_dir }}
+  when: not grafana_binary.stat.exists
+  changed_when: false
+
+- name: Set grafana directory ownership
+  ansible.builtin.file:
+    path: "{{ grafana_dir }}"
+    owner: "{{ grafana_user }}"
+    group: "{{ grafana_group }}"
+    recurse: true

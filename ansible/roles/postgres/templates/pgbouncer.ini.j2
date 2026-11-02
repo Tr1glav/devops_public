@@ -1,0 +1,45 @@
+[databases]
+postgres = host={{ ansible_default_ipv4.address }} port=5432 dbname=postgres
+
+[pgbouncer]
+; Basic settings
+listen_addr = {{ pgbouncer_listen_addr | default('0.0.0.0') }}
+listen_port = {{ pgbouncer_port }}
+unix_socket_dir = /var/run/pgbouncer
+auth_type = {{ pgbouncer_auth_type | default('md5') }}
+auth_file = /etc/pgbouncer/userlist.txt
+logfile = /var/log/pgbouncer/pgbouncer.log
+pidfile = /var/run/pgbouncer/pgbouncer.pid
+admin_users = {{ pgbouncer_admin_users | default('postgres,pgbouncer') }}
+stats_users = {{ pgbouncer_stats_users | default('pgbouncer') }}
+
+; Connection pooling
+pool_mode = {{ pgbouncer_pool_mode | default('transaction') }}
+max_client_conn = {{ pgbouncer_max_client_conn }}
+default_pool_size = {{ pgbouncer_default_pool_size }}
+min_pool_size = {{ pgbouncer_min_pool_size | default(5) }}
+reserve_pool_size = {{ pgbouncer_reserve_pool_size | default(10) }}
+reserve_pool_timeout = {{ pgbouncer_reserve_pool_timeout | default(5) }}
+
+; Timeouts
+server_lifetime = {{ pgbouncer_server_lifetime | default(3600) }}
+server_idle_timeout = {{ pgbouncer_server_idle_timeout | default(600) }}
+server_connect_timeout = {{ pgbouncer_server_connect_timeout | default(15) }}
+server_login_retry = {{ pgbouncer_server_login_retry | default(15) }}
+query_timeout = {{ pgbouncer_query_timeout | default(0) }}
+query_wait_timeout = {{ pgbouncer_query_wait_timeout | default(120) }}
+client_idle_timeout = {{ pgbouncer_client_idle_timeout | default(0) }}
+idle_transaction_timeout = {{ pgbouncer_idle_transaction_timeout | default(0) }}
+
+; Logging
+syslog = {{ pgbouncer_syslog | default(1) }}
+verbose = {{ pgbouncer_verbose | default(0) }}
+
+; Security
+ignore_startup_parameters = {{ pgbouncer_ignore_startup_parameters | default('extra_float_digits') }}
+disable_pqexec = {{ pgbouncer_disable_pqexec | default(0) }}
+
+; Automatic database discovery (for dynamic environments)
+;autodb_dbname = *
+;autodb_max_db_connections = {{ pgbouncer_autodb_max_db_connections | default(45) }}
+;autodb_pool_mode = {{ pgbouncer_pool_mode | default('transaction') }}

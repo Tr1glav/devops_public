@@ -1,0 +1,50 @@
+ADMINS = ()
+
+STATIC_ROOT = '{{ awx_data_dir }}/public/static'
+PROJECTS_ROOT = '{{ awx_projects_dir }}'
+JOBOUTPUT_ROOT = '{{ awx_data_dir }}/job_status'
+
+SECRET_KEY = open('{{ awx_config_dir }}/SECRET_KEY', 'rb').read().strip()
+
+ALLOWED_HOSTS = ['*']
+CSRF_TRUSTED_ORIGINS = {{ awx_csrf_trusted_origins | to_json }}
+
+CLUSTER_HOST_ID = '{{ ansible_hostname }}'
+SYSTEM_UUID = '00000000-0000-0000-0000-000000000000'
+
+DATABASES = {
+    'default': {
+        'ATOMIC_REQUESTS': True,
+        'ENGINE': 'awx.main.db.profiled_pg',
+        'NAME': '{{ awx_db_name }}',
+        'USER': '{{ awx_db_user }}',
+        'PASSWORD': '{{ awx_db_password }}',
+        'HOST': '{{ awx_db_host }}',
+        'PORT': '{{ awx_db_port }}',
+        'OPTIONS': {'sslmode': '{{ awx_db_sslmode }}'},
+    }
+}
+
+BROKER_URL = 'unix://{{ awx_redis_socket }}'
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.redis.RedisCache',
+        'LOCATION': 'unix://{{ awx_redis_socket }}',
+    }
+}
+
+AWX_CLEANUP_PATHS = True
+AWX_PROOT_BASE_PATH = '{{ awx_data_dir }}/tmp'
+AWX_ISOLATION_SHOW_PATHS = []
+
+RECEPTOR_RELEASE_WORK = True
+
+LOGGING['handlers']['console'] = {  # noqa: F821
+    '()': 'logging.StreamHandler',
+    'level': 'DEBUG',
+    'formatter': 'simple',
+}
+
+{% for key, value in awx_extra_settings.items() %}
+{{ key }} = {{ value | to_json }}
+{% endfor %}

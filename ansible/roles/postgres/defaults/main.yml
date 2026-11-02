@@ -1,0 +1,59 @@
+---
+postgres_user: postgres
+postgres_group: postgres
+patroni_user: "patroni"
+patroni_group: "patroni"
+pgbouncer_user: "pgbouncer"
+pgbouncer_group: "pgbouncer"
+cluster_name: "postgres-cluster"
+system_users: "('postgres','replicator','admin')"
+
+postgres_version: "16"
+postgres_conf:
+  max_connections: 100
+  shared_buffers: 1GB
+  work_mem: 16MB
+pg_hba_conf:
+  - local all all trust
+  - host all all <hidden-ip>/32 trust
+  - host all all ::1/128 trust
+  - host replication replicator <hidden-ip>/0 md5
+  - host all all <hidden-ip>/0 md5
+
+pgbouncer_databases:
+  - name: "postgres"
+    host: "{{ patroni_cluster_name }}-leader"
+    port: 5432
+
+pgbouncer_users:
+  - name: "pgbouncer"
+  - name: "postgres"
+
+patroni_home: "/var/lib/patroni"
+patroni_restapi_port: 8008
+patroni_cluster_name: "postgres-cluster"
+patroni_version: "2.1.4"
+
+pgbouncer_listen_addr: "<hidden-ip>"
+pgbouncer_auth_type: "md5"
+pgbouncer_pool_mode: "transaction"
+pgbouncer_min_pool_size: 5
+pgbouncer_reserve_pool_size: 10
+pgbouncer_reserve_pool_timeout: 5
+pgbouncer_server_lifetime: 3600
+pgbouncer_server_idle_timeout: 600
+pgbouncer_admin_users: "postgres,pgbouncer"
+pgbouncer_stats_users: "pgbouncer"
+pgbouncer_port: 6432
+pgbouncer_pool_size: 25
+pgbouncer_max_client_conn: 100
+pgbouncer_default_pool_size: 20
+
+vault_mount: "infra"
+vault_path: "{{ env }}/postgres/appdb"
+vault_dbs_path: "{{ env }}/postgres/appdb/dbs"
+vault_users_path: "{{ env }}/postgres/appdb/users"
+vault_addr: "{{ lookup('env', 'VAULT_ADDR') }}"
+vault_token: "{{ lookup('env', 'VAULT_TOKEN') }}"
+
+venv_path: "/opt/patroni-venv"

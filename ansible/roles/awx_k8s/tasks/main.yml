@@ -1,0 +1,31 @@
+---
+- name: Install requirements
+  ansible.builtin.import_tasks: install_requirements.yml
+  tags:
+    - awx
+    - awx_k8s_requirements
+
+- name: Get secrets
+  ansible.builtin.import_tasks: get_secrets.yml
+  tags:
+    - awx
+    - awx_k8s_secrets
+
+- name: Install awx operator
+  ansible.builtin.import_tasks: install_operator.yml
+  tags:
+    - awx
+    - awx_k8s_operator
+
+- name: Deploy awx
+  ansible.builtin.import_tasks: deploy_awx.yml
+  tags:
+    - awx
+    - awx_k8s_deploy
+
+- name: Display awx credentials
+  ansible.builtin.import_tasks: display_credentials.yml
+  tags:
+    - awx
+    - awx_k8s_credentials
+    - never

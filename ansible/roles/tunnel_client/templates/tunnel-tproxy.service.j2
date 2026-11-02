@@ -1,0 +1,13 @@
+---
+[Unit]
+Description=TPROXY rules for tunnel transit (restore after boot)
+Before=tunnel-client.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/sbin/tunnel-tproxy-up.sh
+ExecReload=/usr/local/sbin/tunnel-tproxy-up.sh
+
+[Install]
+WantedBy=multi-user.target

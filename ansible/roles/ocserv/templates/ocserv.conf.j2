@@ -1,0 +1,67 @@
+device = vpns
+
+auth = "plain[passwd=/etc/ocserv/ocpasswd]"
+
+server-cert = {{ ocserv_cert_path }}
+server-key = {{ ocserv_key_path }}
+
+ipv4-network = {{ ocserv_ip_range }}
+ipv4-netmask = {{ ocserv_netmask }}
+masquerade = "403"                                                                                                                                                                   
+# TCP and UDP ports
+tcp-port = 443
+udp-port = 443
+
+# Performance settings
+keepalive = 32400
+dpd = 60
+mobile-dpd = 1800
+
+# Compression
+compression = true
+no-compress-limit = 256
+
+# MTU settings
+mtu = 1420
+try-mtu-discovery = true
+
+# Authentication timeout
+auth-timeout = 40
+min-reauth-time = 300
+max-ban-score = 50
+ban-reset-time = 300
+
+# Cookie settings
+cookie-timeout = 300
+rekey-time = 172800
+rekey-method = ssl
+
+# User and group
+run-as-user = nobody
+run-as-group = daemon
+
+# Socket file
+socket-file = /var/run/ocserv-socket
+# chroot-dir = /var/lib/ocserv
+
+# Logging
+#debug = true
+#auth-debug = true
+
+# Performance tuning
+output-buffer = 32768
+rate-limit-ms = 100
+
+# Cisco AnyConnect compatibility
+cisco-client-compat = false
+dtls-legacy = true
+
+# Custom headers
+# user-profile = /etc/ocserv/profile.xml
+# Включить возможность анонсировать iroutes другим клиентам
+expose-iroutes = true
+
+
+route-add-cmd = "ip route replace %{RI} dev %{D}"
+route-del-cmd = "ip route delete %{RI} dev %{D} 2>/dev/null || true"
+config-per-user = /etc/ocserv/config-per-user/

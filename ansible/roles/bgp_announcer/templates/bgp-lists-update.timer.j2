@@ -1,0 +1,13 @@
+---
+[Unit]
+Description=Periodic update of BGP announced prefixes
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec={{ bgp_announcer_update_interval }}
+RandomizedDelaySec=90
+Persistent=true
+Unit=bgp-lists-update.service
+
+[Install]
+WantedBy=timers.target

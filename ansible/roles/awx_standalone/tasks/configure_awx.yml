@@ -1,0 +1,55 @@
+---
+- name: Generate secret key if not provided
+  ansible.builtin.set_fact:
+    awx_secret_key: >-
+      {{ lookup('password',
+      '/dev/null length=' ~ awx_secret_key_len ~
+      ' chars=ascii_letters,digits') }}
+  no_log: true
+  when: awx_secret_key | length == 0
+
+- name: Install secret key
+  ansible.builtin.copy:
+    content: "{{ awx_secret_key }}"
+    dest: "{{ awx_config_dir }}/SECRET_KEY"
+    owner: "{{ awx_user }}"
+    group: "{{ awx_group }}"
+    mode: '0600'
+  no_log: true
+  notify: Restart awx
+
+- name: Copy awx settings
+  ansible.builtin.template:
+    src: settings.py.j2
+    dest: "{{ awx_config_dir }}/settings.py"
+    owner: "{{ awx_user }}"
+    group: "{{ awx_group }}"
+    mode: '0640'
+  notify: Restart awx
+
+- name: Copy uwsgi config
+  ansible.builtin.template:
+    src: uwsgi.ini.j2
+    dest: "{{ awx_config_dir }}/uwsgi.ini"
+    owner: "{{ awx_user }}"
+    group: "{{ awx_group }}"
+    mode: '0644'
+  notify: Restart awx-uwsgi
+
+- name: Copy awx systemd services
+  ansible.builtin.template:
+    src: "{{ item }}.service.j2"
+    dest: "/etc/systemd/system/{{ item }}.service"
+    mode: '0644'
+  loop: "{{ awx_services }}"
+  notify: Restart awx
+
+- name: Copy awx logrotate config
+  ansible.builtin.template:
+    src: awx.logrotate.j2
+    dest: /etc/logrotate.d/awx
+    mode: '0644'
+
+- name: Reload systemd
+  ansible.builtin.systemd:
+    daemon_reload: true

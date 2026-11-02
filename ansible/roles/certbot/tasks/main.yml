@@ -1,0 +1,56 @@
+---
+- name: Get secrets from vault
+  ansible.builtin.import_tasks: get_secrets.yml
+  delegate_to: localhost
+  become: false
+  tags:
+    - certbot
+
+- name: Configure certbot
+  ansible.builtin.import_tasks: configure_certbot.yml
+  tags:
+    - certbot
+
+- name: Install requirements
+  ansible.builtin.import_tasks: install_requirements.yml
+  tags:
+    - certbot
+
+- name: Process each domain separately for haproxy
+  ansible.builtin.include_tasks: process_domain.yml
+  loop: "{{ haproxy_ssl_domains }}"
+  loop_control:
+    loop_var: current_domain
+  tags:
+    - certbot
+
+- name: Process each domain separately for cache-servers
+  ansible.builtin.include_tasks: process_domain.yml
+  loop: "{{ cache_servers }}"
+  loop_control:
+    loop_var: current_domain
+  when: cache_servers is defined
+  tags:
+    - certbot
+
+- name: Put certs to vault for haproxy
+  ansible.builtin.include_tasks: put_certs_vault.yml
+  loop: "{{ haproxy_ssl_domains }}"
+  loop_control:
+    loop_var: current_domain
+  tags:
+    - certbot
+
+- name: Put certs to vault for cache_servers
+  ansible.builtin.include_tasks: put_certs_vault.yml
+  loop: "{{ cache_servers }}"
+  loop_control:
+    loop_var: current_domain
+  when: cache_servers is defined
+  tags:
+    - certbot
+
+- name: Prune files
+  ansible.builtin.import_tasks: prune_files.yml
+  tags:
+    - certbot

@@ -1,0 +1,69 @@
+upstream awx_uwsgi {
+    server 127.0.0.1:{{ awx_uwsgi_port }};
+}
+
+upstream awx_daphne {
+    server 127.0.0.1:{{ awx_daphne_port }};
+}
+
+{% if awx_enable_ssl %}
+server {
+    listen {{ awx_listen_port }};
+    server_name {{ awx_domain }};
+
+    return 301 https://$server_name$request_uri;
+}
+
+{% endif %}
+server {
+{% if awx_enable_ssl %}
+    listen {{ awx_ssl_port }} ssl;
+    http2 on;
+
+    ssl_certificate {{ awx_ssl_dir }}/{{ awx_domain }}.crt;
+    ssl_certificate_key {{ awx_ssl_dir }}/{{ awx_domain }}.key;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+{% else %}
+    listen {{ awx_listen_port }};
+{% endif %}
+    server_name {{ awx_domain }};
+
+    client_max_body_size 5m;
+
+    add_header X-Frame-Options SAMEORIGIN;
+    add_header X-Content-Type-Options nosniff;
+
+    location /static/ {
+        alias {{ awx_data_dir }}/public/static/;
+        expires 7d;
+    }
+
+    location /favicon.ico {
+        alias {{ awx_data_dir }}/public/static/media/favicon.ico;
+    }
+
+    location /websocket {
+        proxy_pass http://awx_daphne;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto {{ 'https' if awx_enable_ssl else 'http' }};
+        proxy_redirect off;
+        proxy_read_timeout 3600;
+    }
+
+    location / {
+        proxy_pass http://awx_uwsgi;
+        proxy_set_header Host $http_host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto {{ 'https' if awx_enable_ssl else 'http' }};
+        proxy_redirect off;
+        proxy_read_timeout 120;
+    }
+}

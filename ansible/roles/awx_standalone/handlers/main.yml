@@ -1,0 +1,35 @@
+---
+- name: Restart awx
+  ansible.builtin.systemd:
+    name: "{{ item }}"
+    state: restarted
+    daemon_reload: true
+  loop: "{{ awx_services }}"
+  failed_when: false
+
+- name: Restart awx-uwsgi
+  ansible.builtin.systemd:
+    name: awx-uwsgi
+    state: restarted
+  failed_when: false
+
+- name: Restart awx-receptor
+  ansible.builtin.systemd:
+    name: awx-receptor
+    state: restarted
+  failed_when: false
+
+- name: Restart nginx
+  ansible.builtin.systemd:
+    name: nginx
+    state: restarted
+
+- name: Restart redis
+  ansible.builtin.systemd:
+    name: redis-server
+    state: restarted
+
+- name: Restart postgresql
+  ansible.builtin.systemd:
+    name: postgresql
+    state: restarted

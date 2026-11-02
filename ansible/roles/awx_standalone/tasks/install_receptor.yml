@@ -1,0 +1,43 @@
+---
+- name: Check if receptor is already installed
+  ansible.builtin.stat:
+    path: /usr/local/bin/receptor
+  register: awx_receptor_binary
+
+- name: Download receptor
+  ansible.builtin.get_url:
+    url: "{{ awx_receptor_url }}"
+    dest: "/tmp/receptor-{{ awx_receptor_version }}.tar.gz"
+    mode: '0644'
+  when: not awx_receptor_binary.stat.exists
+
+- name: Extract receptor
+  ansible.builtin.unarchive:
+    src: "/tmp/receptor-{{ awx_receptor_version }}.tar.gz"
+    dest: /usr/local/bin
+    remote_src: true
+    owner: root
+    group: root
+    mode: '0755'
+  when: not awx_receptor_binary.stat.exists
+
+- name: Create receptor directories
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: directory
+    owner: "{{ awx_user }}"
+    group: "{{ awx_group }}"
+    mode: '0755'
+  loop:
+    - /etc/receptor
+    - /var/run/receptor
+    - /var/lib/receptor
+
+- name: Copy receptor config
+  ansible.builtin.template:
+    src: receptor.conf.j2
+    dest: /etc/receptor/receptor.conf
+    owner: "{{ awx_user }}"
+    group: "{{ awx_group }}"
+    mode: '0640'
+  notify: Restart awx-receptor

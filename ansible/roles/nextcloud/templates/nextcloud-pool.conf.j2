@@ -1,0 +1,29 @@
+[nextcloud]
+user = www-data
+group = www-data
+listen = /var/run/php/php{{ nextcloud_php_version }}-fpm-nextcloud.sock
+listen.owner = www-data
+listen.group = www-data
+listen.mode = 0660
+
+pm = {{ nextcloud_php_fpm_pm | default('dynamic') }}
+{% if nextcloud_php_fpm_pm | default('dynamic') == 'dynamic'  %}
+pm.max_children = {{ nextcloud_php_fpm_max_children | default(120) }}
+pm.start_servers = {{ nextcloud_php_fpm_start_servers | default(12) }}
+pm.min_spare_servers = {{ nextcloud_php_fpm_min_spare | default(6) }}
+pm.max_spare_servers = {{ nextcloud_php_fpm_max_spare | default(18) }}
+{% endif  %}
+
+pm.max_requests = {{ nextcloud_php_fpm_max_requests | default(500) }}
+
+env[HOSTNAME] = $HOSTNAME
+env[PATH] = /usr/local/bin:/usr/bin:/bin
+env[TMP] = /tmp
+env[TMPDIR] = /tmp
+env[TEMP] = /tmp
+
+php_admin_value[memory_limit] = {{ nextcloud_php_memory_limit | default('512M') }}
+php_admin_value[upload_max_filesize] = {{ nextcloud_php_upload_max_filesize | default('32G') }}
+php_admin_value[post_max_size] = {{ nextcloud_php_post_max_size | default('32G') }}
+php_admin_value[max_execution_time] = {{ nextcloud_php_max_execution_time | default(3600) }}
+php_admin_value[max_input_time] = {{ nextcloud_php_max_input_time | default(36000) }}
